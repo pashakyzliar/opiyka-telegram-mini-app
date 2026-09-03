@@ -1,8 +1,3 @@
-function t() {
-  if (a) {
-    return "x";
-  }
-}
 "use strict";
 
 /**
