@@ -5,7 +5,7 @@
 
   var EXPENSE_CATS = ["Машина", "Пайка", "Хавка", "Дурка", "Продукти", "Сіги", "Подпіски"];
   var INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
-  var WALLETS = ["Карта", "Кеш"];
+  var WALLETS = ["Кеш"];
   var TRANSFER_CAT = "Переказ";
   var LS_KEY = "kopiyka_v2";
   var COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
@@ -313,8 +313,8 @@
     var txt = document.getElementById("syncText");
     if (!dot) return;
     dot.classList.remove("offline", "warn");
-    if (mode === "online") { txt.textContent = "Малява дійшла"; }
-    else if (mode === "local") { dot.classList.add("offline"); txt.textContent = "Тримаємо локально"; }
+    if (mode === "online") { txt.textContent = "BAHA VORA"; }
+    else if (mode === "local") { dot.classList.add("offline"); txt.textContent = "BAHA SPYT"; }
     else { dot.classList.add("warn"); txt.textContent = "Перепідключення…"; }
   }
 
@@ -473,9 +473,9 @@
     var balance = totalBalance();
     animateValue(document.getElementById("statBalance"), prevStat.balance, balance, fmt, true);
     prevStat.balance = balance;
-    var card = walletBalance("Карта"), cash = walletBalance("Кеш");
+    var cash = walletBalance("Кеш");
     document.getElementById("statBalanceSub").innerHTML =
-      '<span class="split-chip"><i style="background:' + walletColor("Карта") + '"></i>Карта ' + esc(fmtShort(card)) + '</span>' +
+      
       '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(cash)) + '</span>';
 
     var mtx = monthTx(state.viewMonth);
@@ -501,10 +501,10 @@
       prevStat.savings = rate;
     }
 
-    var inCard = sum(mtx.filter(function (t) { return isIncome(t) && t.wallet === "Карта"; }));
+    
     var inCash = sum(mtx.filter(function (t) { return isIncome(t) && t.wallet === "Кеш"; }));
     document.getElementById("statIncomeSub").innerHTML =
-      '<span class="split-chip"><i style="background:' + walletColor("Карта") + '"></i>Карта ' + esc(fmtShort(inCard)) + '</span>' +
+      
       '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(inCash)) + '</span>';
     document.getElementById("statExpenseSub").textContent = mtx.filter(isExpense).length + " списань";
     document.getElementById("statSavingsSub").textContent =
@@ -1120,7 +1120,7 @@
     var row = document.getElementById("presetRow");
     var counts = {};
     state.transactions.filter(isExpense).slice(-400).forEach(function (t) {
-      var k = t.category + "|" + t.amount + "|" + (t.wallet || "Карта");
+      var k = t.category + "|" + t.amount + "|" + (t.wallet || "Кеш");
       counts[k] = (counts[k] || 0) + 1;
     });
     var top = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 6);
@@ -1198,7 +1198,7 @@
           // devices, writes the same id instead of a duplicate row.
           commitTx({
             type: "expense", category: r.category || "Подпіски", amount: Number(r.amount) || 0,
-            wallet: r.wallet || "Карта", date: when, note: r.name, recKey: key, recId: r.id
+            wallet: r.wallet || "Кеш", date: when, note: r.name, recKey: key, recId: r.id
           }, key, true);
         }
         mk = addMonths(mk, 1);
@@ -1213,13 +1213,13 @@
     var patch = {};
     // Old rows carried the wallet in `category` for income and had none at all
     // for expenses.
-    var needWallet = state.transactions.filter(function (t) { return !t.wallet; });
+    var needWallet = state.transactions.filter(function (t) { return !t.wallet || t.wallet === "Карта"; });
     if (needWallet.length) {
       needWallet.forEach(function (t) {
         var up = {};
-        if (t.type === "income" && WALLETS.indexOf(t.category) >= 0) { up.wallet = t.category; up.category = "ЗП"; }
-        else if (t.type === "income") { up.wallet = "Карта"; if (INCOME_CATS.indexOf(t.category) < 0) up.category = "ЗП"; }
-        else { up.wallet = "Карта"; }
+        if (t.type === "income" && (t.category === "Карта" || t.category === "Кеш")) { up.wallet = "Кеш"; up.category = "ЗП"; }
+        else if (t.type === "income") { up.wallet = "Кеш"; if (INCOME_CATS.indexOf(t.category) < 0) up.category = "ЗП"; }
+        else { up.wallet = "Кеш"; }
         store.update("transactions", t.id, up).catch(function () {});
       });
     }
@@ -1378,7 +1378,7 @@
       "Статті доходу: " + ctx.incomeCategories.join(", ") + ".\n" +
       "Гаманці: " + ctx.wallets.join(", ") + ".\n" +
       "Поверни ТІЛЬКИ JSON-масив об'єктів виду " +
-      '{"type":"expense"|"income","category":"...","amount":123.45,"wallet":"Карта"|"Кеш","date":"YYYY-MM-DD","note":"..."}.\n' +
+      '{"type":"expense"|"income","category":"...","amount":123.45,"wallet":"Кеш","date":"YYYY-MM-DD","note":"..."}.\n' +
       "Категорію обирай лише зі списків вище. Якщо гаманець не вказано — \"Карта\". " +
       "Відносні дати (вчора, позавчора) переводь у конкретну дату. Якщо дата не вказана — сьогодні.\n\n" +
       "Текст: " + text;
@@ -1404,7 +1404,7 @@
     var type = r.type === "income" ? "income" : "expense";
     var cats = type === "income" ? INCOME_CATS : EXPENSE_CATS;
     var cat = cats.indexOf(r.category) >= 0 ? r.category : cats[0];
-    var wallet = WALLETS.indexOf(r.wallet) >= 0 ? r.wallet : "Карта";
+    var wallet = "Кеш";
     var date = /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) ? r.date : todayISO();
     return { type: type, category: cat, amount: amt, wallet: wallet, date: date, note: String(r.note || "").slice(0, 120) };
   }
@@ -1563,7 +1563,7 @@
       var fd = new FormData(form);
       var p = parseAmount(fd.get("amount"));
       if (!p.ok) { showError("журнал", p.msg); form.querySelector('input[name="amount"]').focus(); return; }
-      var wallet = fd.get("wallet") || "Карта";
+      var wallet = fd.get("wallet") || "Кеш";
       var payload = {
         type: currentType, amount: p.value, wallet: wallet,
         date: fd.get("date") || todayISO(), note: String(fd.get("note") || "").trim()
