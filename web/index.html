@@ -8,26 +8,49 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bad+Script&family=Oswald:wght@400;500;600;700&family=Rubik+Mono+One&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext">
-  <link rel="stylesheet" href="./src/style.css">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script src="./config.js"></script>
+  <script>
+    window.__appAssetVersion = String(Date.now());
+    window.__withAppVersion = function (path) {
+      var join = path.indexOf("?") === -1 ? "?" : "&";
+      return path + join + "v=" + encodeURIComponent(window.__appAssetVersion);
+    };
+    window.__showBootError = function () {
+      document.body.innerHTML = "<main style=\"padding:24px;font:16px system-ui\">Копійка не завантажилась. Перезапусти Mini App.</main>";
+    };
+    (function loadAppStyle() {
+      var el = document.createElement("link");
+      el.rel = "stylesheet";
+      el.href = window.__withAppVersion("./src/style.css");
+      document.head.appendChild(el);
+    })();
+    window.addEventListener("error", function (event) {
+      console.error(event.error || event.message || event);
+      window.__showBootError();
+    });
+    window.addEventListener("unhandledrejection", function (event) {
+      console.error(event.reason || event);
+      window.__showBootError();
+    });
+  </script>
 </head>
 <body>
   <noscript>Для роботи Копійки потрібен JavaScript.</noscript>
   <script>
     (async function () {
       try {
-        var markup = await fetch("./src/markup.html", { cache: "no-store" }).then(function (r) {
+        var markup = await fetch(window.__withAppVersion("./src/markup.html"), { cache: "no-store" }).then(function (r) {
           if (!r.ok) throw new Error("markup: " + r.status);
           return r.text();
         });
         document.body.insertAdjacentHTML("afterbegin", markup);
         var scripts = [
-          "./telegram-adapter.js",
+          window.__withAppVersion("./config.js"),
+          window.__withAppVersion("./telegram-adapter.js"),
           "./src/vendor/gsap.min.js",
           "./src/vendor/Flip.min.js",
-          "./src/anim.js",
-          "./src/app.js"
+          window.__withAppVersion("./src/anim.js"),
+          window.__withAppVersion("./src/app.js")
         ];
         for (var i = 0; i < scripts.length; i++) {
           await new Promise(function (resolve, reject) {
@@ -39,7 +62,7 @@
           });
         }
       } catch (err) {
-        document.body.innerHTML = "<main style=\"padding:24px;font:16px system-ui\">Копійка не завантажилась. Перезапусти Mini App.</main>";
+        window.__showBootError();
         console.error(err);
       }
     })();

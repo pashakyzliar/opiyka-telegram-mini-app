@@ -1855,6 +1855,16 @@
     });
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
-  else init();
+  function start() {
+    try {
+      init();
+    } catch (err) {
+      console.error(err);
+      if (typeof window.__showBootError === "function") window.__showBootError();
+      else throw err;
+    }
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
 })();
