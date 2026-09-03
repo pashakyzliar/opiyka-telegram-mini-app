@@ -396,8 +396,12 @@ function botErrorText(error) {
 
 async function handleBotStart(message) {
   const chatId = message.chat.id;
-  const intro = "Копійка в боті.\n" + botAi.helpText(PUBLIC_URL);
+  const intro = "Wallet by Baha_Vora";
   return sendBotMessage(chatId, intro, appMarkup());
+}
+
+async function handleBotHelp(message) {
+  return sendBotMessage(message.chat.id, botAi.helpText(PUBLIC_URL), appMarkup());
 }
 
 async function handleBotWrite(message) {
@@ -470,7 +474,8 @@ async function handleBotUpdate(update) {
   if (!text) return;
 
   const route = botAi.routeBotMessage(text);
-  if (route === "app" || route === "help") return handleBotStart(message);
+  if (route === "app") return handleBotStart(message);
+  if (route === "help") return handleBotHelp(message);
   if (!ai.configured()) {
     return sendBotMessage(message.chat.id, "AI на сервері не налаштовано.\n" + botAi.helpText(PUBLIC_URL), appMarkup());
   }
