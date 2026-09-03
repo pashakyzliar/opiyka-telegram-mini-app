@@ -1470,7 +1470,7 @@
   function renderAll() {
     dropMonthCache();
     var steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
-      renderTrend, renderStreak, renderLedger, renderRecurring, renderAmortize,
+      renderTrend, renderLedger, renderRecurring, renderAmortize,
       renderDebts, renderRecords, renderTicker, renderYear, renderPresets, renderSettings, syncSearchCats];
     steps.forEach(function (fn) {
       try { fn(); } catch (err) { console.error("[Копійка] помилка рендеру в " + fn.name + ":", err); }

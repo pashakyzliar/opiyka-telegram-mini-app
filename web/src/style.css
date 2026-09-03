@@ -422,6 +422,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
   box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
 }
 .quick-add input[name="amount"] { font-family: "Rubik Mono One", Oswald, monospace; letter-spacing: .02em; width: 130px; }
+.quick-add #txCategory { flex: 1 1 220px; min-width: 180px; }
 .quick-add input[name="note"] { flex: 1 1 180px; }
 .stack-form { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .mini-check {
