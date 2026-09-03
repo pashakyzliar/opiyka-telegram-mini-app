@@ -131,12 +131,12 @@
         <div class="type-toggle" role="group" aria-label="Тип операції">
           <button type="button" data-type="expense" class="active">Витрата</button>
           <button type="button" data-type="income">Дохід</button>
-          <button type="button" data-type="transfer">Переказ</button>
+          
         </div>
         <input type="date" name="date" required aria-label="Дата" />
         <select name="category" id="txCategory" required aria-label="Стаття"></select>
-        <select name="wallet" id="txWallet" aria-label="Гаманець"></select>
-        <select name="toWallet" id="txToWallet" aria-label="Куди" hidden></select>
+        
+        
         <input type="text" name="amount" inputmode="decimal" autocomplete="off" placeholder="Сума, ₴" required aria-label="Сума" />
         <input type="text" name="note" placeholder="Нотатка" maxlength="120" aria-label="Нотатка" />
         <button class="btn-primary" type="submit">Додати</button>
