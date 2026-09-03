@@ -8,6 +8,9 @@ const { existsSync } = require("node:fs");
 
 loadDotEnv(path.join(__dirname, ".env"));
 
+// ЗМІНА: AI-клієнт. Модуль сам вирішує, чи він налаштований (AI_BASE_URL).
+const ai = require("./ai");
+
 const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = String(process.env.BOT_TOKEN || "");
 const PUBLIC_URL = String(process.env.PUBLIC_URL || "").replace(/\/$/, "");
@@ -191,6 +194,44 @@ async function api(req, res, pathname) {
   const { store, account } = await accountFor(auth.id);
   if (req.method === "GET" && pathname === "/api/state") return json(res, 200, account);
 
+  /* --------------------------- ЗМІНА: AI --------------------------- */
+  // Обидва маршрути стоять ДО регулярки колекцій: інакше "ai" впало б у неї
+  // і повернуло 404, бо в COLLECTIONS його немає.
+
+  if (req.method === "GET" && pathname === "/api/ai/status") {
+    // Дешево і без витрат квоти: app.js питає це на старті, щоб вирішити,
+    // показувати кнопку AI чи ні.
+    if (!ai.configured()) return json(res, 200, { enabled: false });
+    return json(res, 200, Object.assign({ enabled: true, model: ai.AI_MODEL }, ai.quotaFor(auth.id)));
+  }
+
+  if (req.method === "POST" && pathname === "/api/ai") {
+    if (!ai.configured()) return errorJson(res, 503, "not_granted", "AI не налаштовано на сервері.");
+
+    // Спершу читаємо тіло, потім резервуємо слот: порожній запит не має
+    // з'їдати квоту. Але резерв усе одно стоїть ДО звернення до провайдера.
+    const payload = await bodyJson(req);
+    const prompt = String(payload && payload.prompt || "").trim();
+    if (!prompt) return errorJson(res, 400, "bad_request", "Порожній запит до AI.");
+
+    const gate = ai.reserve(auth.id);
+    if (!gate.ok) return errorJson(res, 429, gate.code, gate.message);
+
+    try {
+      const out = await ai.askJson(prompt);
+      if (out.usage) {
+        console.log("AI", auth.id, out.model, JSON.stringify(out.usage), gate.used + "/" + gate.limit);
+      }
+      return json(res, 200, { result: out.result });
+    } catch (error) {
+      const code = error.code || "provider_error";
+      const status = code === "not_granted" ? 503 : code === "rate_limited" ? 429 : 502;
+      console.error("AI помилка:", code, error.message);
+      return errorJson(res, status, code, error.message);
+    }
+  }
+  /* ------------------------- кінець змін AI ------------------------- */
+
   if (req.method === "PUT" && pathname === "/api/settings") {
     const payload = await bodyJson(req);
     account.settings = Object.assign(defaultSettings(), account.settings, payload || {});
@@ -332,5 +373,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log("Копійка слухає порт " + PORT);
+  console.log(ai.configured() ? "AI увімкнено: " + ai.AI_MODEL : "AI вимкнено: не задано AI_BASE_URL.");
   void botPolling();
 });
