@@ -1409,6 +1409,16 @@
         if (days.length) { saveSettings({ salaryDays: days.slice(0, 6) }); renderAll(); }
       };
     });
+    if (salaryDaysList) salaryDaysList.querySelectorAll("[data-remove-salary-day]").forEach(function (button) {
+      button.onclick = function () {
+        var days = settings().salaryDays.slice();
+        var index = Number(button.dataset.removeSalaryDay);
+        if (days.length <= 1) { showError("Місячний план", "Залиши хоча б одну дату виплати."); return; }
+        days.splice(index, 1);
+        saveSettings({ salaryDays: days });
+        renderAll();
+      };
+    });
 
     var weekPlanStatus = document.getElementById("weekPlanStatus");
     if (weekPlanStatus) {
@@ -1518,7 +1528,7 @@
         var date = currentMonth + '-' + pad(day);
         var payment = s.salaryPayments.find(function (p) { return p.date === date; });
         var status = payment ? (payment.actual === 0 ? '✕ ' + fmtShort(payment.expected) : (Math.abs(payment.actual - payment.expected) < 0.01 ? '✓ ' : '● ') + fmtShort(payment.actual) + ' / ' + fmtShort(payment.expected)) : '';
-        return '<label class="setting-row"><span>Виплата ' + (index + 1) + ' ' + status + '</span><input type="date" data-salary-day="' + index + '" value="' + date + '" /></label>';
+        return '<label class="setting-row"><span>Виплата ' + (index + 1) + ' ' + status + '</span><input type="date" data-salary-day="' + index + '" value="' + date + '" /><button class="icon-btn" type="button" data-remove-salary-day="' + index + '" aria-label="Видалити виплату">✕</button></label>';
       }).join("");
     }
     var wb = document.getElementById("weekBudget");
