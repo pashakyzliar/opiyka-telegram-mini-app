@@ -1100,8 +1100,7 @@
     var el = document.getElementById("streakStrip");
     el.innerHTML =
       '<span class="streak-cur">Серія ' + s.current + '</span>' +
-      '<span class="streak-rec">рекорд ' + s.record + '</span>' +
-      (s.todayLogged ? '' : '<span class="streak-todo">сьогодні ще порожньо</span>');
+      '<span class="streak-rec">рекорд ' + s.record + '</span>';
   }
 
   var flipPending = false;
