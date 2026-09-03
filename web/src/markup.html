@@ -90,6 +90,8 @@
       </div>
 
       <div class="search-bar">
+        <button class="search-toggle btn" type="button" id="searchToggle" aria-expanded="false" aria-controls="searchFilters">⌄ Пошук</button>
+        <div class="search-filters" id="searchFilters" hidden>
         <input type="search" id="searchText" placeholder="Пошук по нотатці…" aria-label="Пошук" />
         <select id="searchCat" aria-label="Стаття"><option value="">Усі статті</option></select>
         <input type="text" id="searchMin" inputmode="decimal" placeholder="від, ₴" aria-label="Сума від" />
@@ -97,6 +99,7 @@
         <input type="date" id="searchFrom" aria-label="Дата від" />
         <input type="date" id="searchTo" aria-label="Дата до" />
         <button class="btn" type="button" id="searchReset">Скинути фільтр</button>
+        </div>
       </div>
       <div class="filter-note" id="filterNote" hidden></div>
 
@@ -142,6 +145,12 @@
         <div class="cell-sub" id="statIncomeSub"></div>
       </div>
 
+      <div class="cell cell-in">
+        <span class="cell-label">Зашло факт <span class="cell-sub2">усі приходи</span></span>
+        <span class="cell-value positive money" id="statIncomeFact">0,00 ₴</span>
+        <div class="cell-sub" id="statIncomeFactSub"></div>
+      </div>
+
       <div class="cell cell-out">
         <span class="cell-label">Спускаємо <span class="cell-sub2">витрати/місяць</span></span>
         <span class="cell-value negative money" id="statExpense">0,00 ₴</span>
@@ -165,15 +174,6 @@
         <div id="donutWrap"></div>
       </section>
 
-      <section class="panel panel-wave">
-        <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
-        <div id="trendWrap"></div>
-      </section>
-
-      <section class="panel panel-delta-slab">
-        <div class="panel-head"><h2>Дельта до минулого</h2><span class="panel-note">по статтях</span></div>
-        <div id="deltaList"></div>
-      </section>
     </div>
   </section>
 
@@ -187,6 +187,10 @@
       </div>
     </div>
     <div class="bento bento-year" id="yearTotals"></div>
+    <section class="panel panel-wave">
+      <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
+      <div id="trendWrap"></div>
+    </section>
     <section class="panel"><div id="yearTable"></div></section>
   </section>
 

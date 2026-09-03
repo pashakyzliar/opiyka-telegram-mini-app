@@ -730,9 +730,11 @@
       '<span class="split-chip"><i style="background:' + css("--gold") + '"></i>Навар ' + esc(fmtShort(navarSum)) + '</span>';
 
     var actual = monthActuals(state.viewMonth);
-    var income = plannedSalary(state.viewMonth) || actual.income;
+    var plannedIncome = plannedSalary(state.viewMonth);
+    var income = plannedIncome > 0 ? Math.max(0, plannedIncome - actual.income) : actual.income;
     var expense = actual.expense;
     animateValue(document.getElementById("statIncome"), prevStat.income, income, fmt);
+    animateValue(document.getElementById("statIncomeFact"), null, actual.income, fmt);
     animateValue(document.getElementById("statExpense"), prevStat.expense, expense, fmt);
     prevStat.income = income; prevStat.expense = expense;
 
@@ -744,11 +746,12 @@
     }
     prevStat.savings = navarSum;
 
-    var inCash = income;
+    var inCash = actual.income;
     document.getElementById("statIncomeSub").innerHTML =
-      plannedSalary(state.viewMonth) > 0
-        ? '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>' + esc(payoutLabel(state.viewMonth)) + '</span>'
+      plannedIncome > 0
+        ? '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>' + esc(payoutLabel(state.viewMonth)) + ' · очікується</span>'
         : '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>факт ' + esc(fmtShort(inCash)) + '</span>';
+    document.getElementById("statIncomeFactSub").textContent = plannedIncome > 0 ? "усі приходи за місяць" : "фактичні надходження";
     document.getElementById("statExpenseSub").textContent = monthTx(state.viewMonth).filter(isExpense).length + " списань";
     var savSub = document.getElementById("statSavingsSub");
     if (savSub) savSub.textContent =
@@ -1467,7 +1470,7 @@
 
   function renderAll() {
     dropMonthCache();
-    var steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDelta, renderDonut,
+    var steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
       renderTrend, renderStreak, renderLedger, renderRecurring, renderAmortize,
       renderDebts, renderRecords, renderTicker, renderYear, renderPresets, renderSettings, syncSearchCats];
     steps.forEach(function (fn) {
@@ -2402,6 +2405,13 @@
     });
 
     // search
+    document.getElementById("searchToggle").addEventListener("click", function () {
+      var filters = document.getElementById("searchFilters");
+      var open = filters.hidden;
+      filters.hidden = !open;
+      this.setAttribute("aria-expanded", String(open));
+      this.textContent = open ? "⌃ Пошук" : "⌄ Пошук";
+    });
     ["searchText", "searchMin", "searchMax"].forEach(function (id) {
       document.getElementById(id).addEventListener("input", debounce(readSearch, 200));
     });

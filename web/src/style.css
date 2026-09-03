@@ -455,6 +455,9 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 }
 .search-bar input[type="search"] { flex: 1 1 200px; }
 .search-bar input[type="text"] { width: 92px; }
+.search-toggle { display: none; }
+.search-filters { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 8px; }
+.search-filters[hidden] { display: none; }
 .filter-note { font-size: 11px; color: var(--gold); margin-bottom: 8px; }
 
 /* ------------------------- журнал ------------------------- */
@@ -891,6 +894,8 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 /* ------------------------- мобільний ------------------------- */
 
 @media (max-width: 720px) {
+  .search-toggle { display: inline-flex; }
+  .search-filters { flex-basis: 100%; }
   .app { padding: 0 11px 52px; }
   .brand h1 { font-size: 24px; }
   .brand-graffiti { letter-spacing: .05em; -webkit-text-stroke-width: .7px; text-shadow: 2px 2px 0 var(--gold-lo), 3px 3px 0 rgba(29, 42, 34, .25); }
