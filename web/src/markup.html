@@ -240,10 +240,12 @@
     <div class="grid-2">
       <section class="panel">
         <div class="panel-head"><h2>Місячний план</h2><span class="panel-note">ЗП і дні надходження</span></div>
+        <label class="setting-row"><span>Місячний план</span>
+          <input type="checkbox" id="salaryPlanEnabled" /></label>
         <label class="setting-row"><span>ЗП за місяць</span>
           <input type="text" id="salaryAmount" inputmode="decimal" placeholder="70000" /></label>
-        <label class="setting-row"><span>Дні надходження</span>
-          <input type="text" id="salaryDays" inputmode="numeric" placeholder="5, 20" /></label>
+        <div class="setting-row salary-days-head"><span>Дні надходження</span><button class="btn" type="button" id="addSalaryDay">+ дата</button></div>
+        <div id="salaryDaysList" class="stack-form"></div>
         <div class="setting-note" id="salaryPlanNote"></div>
       </section>
 

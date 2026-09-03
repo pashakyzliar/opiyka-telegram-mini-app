@@ -260,6 +260,8 @@
       expenseCategories: cloneDefaultExpenseCategories(),
       salaryAmount: 0,
       salaryDays: [5, 20],
+      salaryPlanEnabled: false,
+      salaryPayments: [],
       allowanceEnabled: false,
       weekBudget: 0,
       weekReserve: 0,
@@ -279,6 +281,8 @@
     if (!Array.isArray(s.salaryDays) || !s.salaryDays.length) s.salaryDays = [5, 20];
     s.allowanceEnabled = !!s.allowanceEnabled;
     s.salaryAmount = Math.max(0, round2(s.salaryAmount));
+    s.salaryPlanEnabled = !!s.salaryPlanEnabled;
+    if (!Array.isArray(s.salaryPayments)) s.salaryPayments = [];
     s.weekBudget = Math.max(0, round2(s.weekBudget));
     s.weekReserve = Math.max(0, round2(s.weekReserve));
     s.weekDaily = normalizeWeekDaily(s.weekDaily);
@@ -1397,6 +1401,14 @@
           : "ЗП задана, але дні надходження ще не вказані.";
       } else salaryNote.textContent = "Місячна ЗП поки не задана.";
     }
+    var salaryDaysList = document.getElementById("salaryDaysList");
+    if (salaryDaysList) salaryDaysList.querySelectorAll("[data-salary-day]").forEach(function (input) {
+      input.onchange = function () {
+        var days = Array.prototype.slice.call(salaryDaysList.querySelectorAll("[data-salary-day]"))
+          .map(function (el) { return Number(String(el.value).slice(8, 10)); }).filter(function (d) { return d >= 1 && d <= 31; });
+        if (days.length) { saveSettings({ salaryDays: days.slice(0, 6) }); renderAll(); }
+      };
+    });
 
     var weekPlanStatus = document.getElementById("weekPlanStatus");
     if (weekPlanStatus) {
@@ -1495,10 +1507,20 @@
     syncExpenseCategoryControls();
     var ae = document.getElementById("allowanceEnabled");
     if (ae) ae.checked = !!s.allowanceEnabled;
+    var spe = document.getElementById("salaryPlanEnabled");
+    if (spe) spe.checked = !!s.salaryPlanEnabled;
     var sa = document.getElementById("salaryAmount");
     if (sa && document.activeElement !== sa) sa.value = s.salaryAmount ? String(s.salaryAmount) : "";
-    var sd = document.getElementById("salaryDays");
-    if (sd && document.activeElement !== sd) sd.value = s.salaryDays.join(", ");
+    var salaryDaysList = document.getElementById("salaryDaysList");
+    if (salaryDaysList && document.activeElement && !salaryDaysList.contains(document.activeElement)) {
+      var currentMonth = monthKey(todayISO());
+      salaryDaysList.innerHTML = s.salaryDays.map(function (day, index) {
+        var date = currentMonth + '-' + pad(day);
+        var payment = s.salaryPayments.find(function (p) { return p.date === date; });
+        var status = payment ? (payment.actual === 0 ? '✕' : Math.abs(payment.actual - payment.expected) < 0.01 ? '✓' : '●') : '';
+        return '<label class="setting-row"><span>Виплата ' + (index + 1) + ' ' + status + '</span><input type="date" data-salary-day="' + index + '" value="' + date + '" /></label>';
+      }).join("");
+    }
     var wb = document.getElementById("weekBudget");
     if (wb && document.activeElement !== wb) wb.value = s.weekBudget ? String(s.weekBudget) : "";
     var wr = document.getElementById("weekReserve");
@@ -1659,6 +1681,36 @@
     if (!s.migratedV4) patch.migratedV4 = true;
     if (Object.keys(patch).length) saveSettings(patch);
     syncNavarHistory();
+  }
+
+  function askDueSalaryPayments() {
+    var s = settings();
+    if (!s.salaryPlanEnabled || !s.salaryAmount || !s.salaryDays.length || !store) return;
+    var mk = monthKey(todayISO());
+    var today = todayISO();
+    var payments = Array.isArray(s.salaryPayments) ? s.salaryPayments.slice() : [];
+    var jobs = [];
+    salaryDaysForMonth(mk).forEach(function (day) {
+      var date = mk + "-" + pad(day);
+      if (date > today || payments.some(function (p) { return p.date === date; })) return;
+      jobs.push(confirmBox("Чи відбулося надходження ЗП " + date.split("-").reverse().join(".") + "?"));
+    });
+    if (!jobs.length) return;
+    Promise.all(jobs).then(function (answers) {
+      var index = 0;
+      salaryDaysForMonth(mk).forEach(function (day) {
+        var date = mk + "-" + pad(day);
+        if (date > today || payments.some(function (p) { return p.date === date; })) return;
+        var yes = answers[index++];
+        var amount = yes ? Number(window.prompt("Вкажи фактичну суму надходження", String(round2(s.salaryAmount / s.salaryDays.length))).replace(",", ".")) : 0;
+        if (yes && amount > 0) {
+          jobs.push(commitTx({ type: "income", category: "ЗП", amount: round2(amount), wallet: "Кеш", date: date, note: "ЗП за " + date }, "salary." + date, true));
+        }
+        payments.push({ date: date, expected: round2(s.salaryAmount / s.salaryDays.length), actual: yes && amount > 0 ? round2(amount) : 0 });
+      });
+      saveSettings({ salaryPayments: payments });
+      Promise.all(jobs).then(function () { renderAll(); });
+    });
   }
 
   // One-time lift of a localStorage-era journal into db, guarded against
@@ -2255,10 +2307,15 @@
       saveSettings({ salaryAmount: p.value });
       renderAll();
     });
-    document.getElementById("salaryDays").addEventListener("change", function () {
-      var days = String(this.value).split(/[^\d]+/).map(Number).filter(function (d) { return d >= 1 && d <= 31; });
-      if (!days.length) { showError("налаштування", "Вкажи хоч один день від 1 до 31."); this.value = settings().salaryDays.join(", "); return; }
-      saveSettings({ salaryDays: days.slice(0, 6) });
+    document.getElementById("salaryPlanEnabled").addEventListener("change", function () {
+      saveSettings({ salaryPlanEnabled: this.checked });
+      renderAll();
+    });
+    document.getElementById("addSalaryDay").addEventListener("click", function () {
+      var days = settings().salaryDays.slice();
+      if (days.length >= 6) return;
+      days.push(Number(todayISO().slice(8, 10)));
+      saveSettings({ salaryDays: days });
       renderAll();
     });
     document.getElementById("allowanceEnabled").addEventListener("change", function () {
@@ -2464,6 +2521,7 @@
       if (db) { store = makeDbStore(db); setSync("online"); }
       else { store = makeLocalStore(); setSync("local"); }
       bindStore();
+      setTimeout(askDueSalaryPayments, 500);
       if (db) setTimeout(migrateLocalToDb, 900);
     });
 
