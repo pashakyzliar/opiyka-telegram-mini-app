@@ -183,6 +183,42 @@
     };
   }
 
+  /* ======================= ЗМІНА: capability "sample" =======================
+     app.js уже вміє все — runAiWrite() вносить операції, runAiAsk() будує
+     фільтр для питання. Бракувало лише реалізації caps.sample. Контракт:
+
+       sample.json(prompt, { signal }) -> Promise<розібраний JSON>
+
+     Помилки мають нести .code, який розуміє handleAiError():
+       "cancelled"    — користувач натиснув «Стоп»
+       "not_granted"  — AI недоступний, кнопку треба сховати
+       "rate_limited" — впертись у ліміт, показати «зачекай»
+     ====================================================================== */
+
+  function makeSample() {
+    return {
+      json: function (prompt, options) {
+        var opts = options || {};
+        if (opts.signal && opts.signal.aborted) {
+          return Promise.reject(Object.assign(new Error("cancelled"), { code: "cancelled" }));
+        }
+        return request("/api/ai", {
+          method: "POST",
+          body: JSON.stringify({ prompt: String(prompt || "") }),
+          signal: opts.signal
+        }).then(function (data) {
+          return data && Object.prototype.hasOwnProperty.call(data, "result") ? data.result : null;
+        }).catch(function (err) {
+          // fetch кидає AbortError без нашого коду — перекладаємо на "cancelled",
+          // інакше app.js покаже «Не вийшло» замість «Скасовано».
+          var aborted = (err && err.name === "AbortError") || (opts.signal && opts.signal.aborted);
+          if (aborted) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
+          throw err;
+        });
+      }
+    };
+  }
+
   bootTelegram();
 
   window.claude = {
@@ -190,7 +226,14 @@
       if (capability === "downloads") {
         return Promise.resolve({ save: function (payload) { return saveBlob(payload.filename, payload.data); } });
       }
-      if (capability === "sample") return Promise.resolve(null);
+      if (capability === "sample") {
+        if (isFile || (!initData() && !devUserId)) return Promise.resolve(null);
+        // Статус безкоштовний — не витрачає квоту провайдера. Якщо сервер
+        // каже enabled:false, кнопка AI просто не з'явиться.
+        return request("/api/ai/status", { method: "GET" })
+          .then(function (status) { return status && status.enabled ? makeSample() : null; })
+          .catch(function () { return null; });
+      }
       if (capability !== "db" || isFile || (!initData() && !devUserId)) return Promise.resolve(null);
       return request("/api/state", { method: "GET" }).then(function (state) {
         return makeApiDb(state);
