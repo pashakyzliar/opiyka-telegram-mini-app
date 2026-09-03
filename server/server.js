@@ -309,7 +309,7 @@ async function staticFile(res, pathname) {
     const content = await fs.readFile(file);
     res.writeHead(200, {
       "Content-Type": MIME[path.extname(file).toLowerCase()] || "application/octet-stream",
-      "Cache-Control": pathname.endsWith("config.js") ? "no-store" : "public, max-age=3600"
+      "Cache-Control": /\/vendor\/|\.(woff2|svg|ico|png|jpg)$/i.test(pathname) ? "public, max-age=31536000, immutable" : "no-cache"
     });
     res.end(content);
   } catch (error) {
