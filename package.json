@@ -1,0 +1,12 @@
+{
+  "name": "kopiyka-telegram-mini-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Копійка — Telegram Mini App для особистих фінансів",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

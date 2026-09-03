@@ -1,0 +1,277 @@
+
+<div class="bg-vignette"></div>
+<canvas id="guilloche" class="bg-guilloche" aria-hidden="true"></canvas>
+
+<div class="pin-gate" id="pinGate" hidden>
+  <form class="pin-box" id="pinForm">
+    <h2 class="engraved">Копійка</h2>
+    <p class="pin-note" id="pinNote">Введи PIN</p>
+    <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="••••" />
+    <button class="btn-primary" type="submit">Відкрити</button>
+    <p class="pin-warn">PIN ховає екран від чужого погляду. Дані він не шифрує.</p>
+  </form>
+</div>
+
+<div class="app" id="app">
+  <div class="ticker"><div class="ticker-track" id="tickerTrack"></div></div>
+
+  <div class="topbar">
+    <div class="brand">
+      <h1 class="engraved">Копійка</h1>
+      <span class="tagline">твій особистий общак</span>
+    </div>
+    <div class="topbar-right">
+      <nav class="viewtabs" role="tablist">
+        <button class="viewtab active" data-view="main" role="tab" aria-selected="true">Місяць</button>
+        <button class="viewtab" data-view="year" role="tab" aria-selected="false">Рік</button>
+        <button class="viewtab" data-view="plan" role="tab" aria-selected="false">Плани</button>
+      </nav>
+      <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
+    </div>
+  </div>
+
+  <div class="backup-nudge" id="backupNudge" hidden>
+    <span>Тиждень без резервної копії. Зберегти?</span>
+    <button class="btn" type="button" id="nudgeSave">Зберегти копію</button>
+    <button class="icon-btn" type="button" id="nudgeDismiss" aria-label="Пізніше">✕</button>
+  </div>
+
+  <section class="view" id="view-main">
+
+    <div class="bento">
+      <div class="cell cell-hero" id="allowanceCard">
+        <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
+        <span class="denomination money" id="allowanceValue">—</span>
+        <div class="cell-meta">
+          <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
+          <span id="allowanceHint"></span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
+      </div>
+
+      <div class="cell cell-balance">
+        <span class="cell-label">Общак <span class="cell-sub2">заг. баланс</span></span>
+        <span class="cell-value money" id="statBalance">0,00 ₴</span>
+        <div class="cell-sub" id="statBalanceSub"></div>
+        <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="cell cell-in">
+        <span class="cell-label">Заносять <span class="cell-sub2">дохід/місяць</span></span>
+        <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
+        <div class="cell-sub" id="statIncomeSub"></div>
+      </div>
+
+      <div class="cell cell-out">
+        <span class="cell-label">Спускаємо <span class="cell-sub2">витрати/місяць</span></span>
+        <span class="cell-value negative money" id="statExpense">0,00 ₴</span>
+        <div class="cell-sub" id="statExpenseSub"></div>
+      </div>
+
+      <div class="cell cell-rate">
+        <span class="cell-label">Навар <span class="cell-sub2">% заощаджень</span></span>
+        <span class="cell-value money" id="statSavings">0%</span>
+        <div class="cell-sub" id="statSavingsSub"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <section class="panel">
+        <div class="panel-head"><h2>Ліміти</h2><span class="panel-note">по статтях</span></div>
+        <div id="budgetList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Розклад витрат</h2><span class="panel-note" id="donutNote"></span></div>
+        <div id="donutWrap"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Схрон</h2><button class="btn" type="button" id="addGoalBtn">+ заначка</button></div>
+        <div id="goalsList"></div>
+        <form id="goalForm" class="stack-form" hidden>
+          <input type="text" name="name" placeholder="Назва" maxlength="60" required />
+          <input type="text" name="target" inputmode="decimal" placeholder="Ціль, ₴" required />
+          <input type="date" name="deadline" aria-label="Дедлайн" />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="hallOfFame"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
+        <div id="trendWrap"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Найближчі списання</h2><span class="panel-note" id="upcomingNote"></span></div>
+        <div id="upcomingList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Дельта до минулого</h2><span class="panel-note">по статтях</span></div>
+        <div id="deltaList"></div>
+      </section>
+    </div>
+
+    <section class="panel panel-ledger">
+      <div class="ledger-head">
+        <h2>Журнал</h2>
+        <div class="month-nav">
+          <button class="icon-btn" type="button" id="prevMonth" aria-label="Попередній місяць">‹</button>
+          <span class="month-label" id="monthLabel"></span>
+          <button class="icon-btn" type="button" id="nextMonth" aria-label="Наступний місяць">›</button>
+        </div>
+      </div>
+
+      <div class="streak-strip" id="streakStrip"></div>
+      <div class="presets" id="presetRow"></div>
+
+      <form class="quick-add" id="txForm">
+        <div class="type-toggle" role="group" aria-label="Тип операції">
+          <button type="button" data-type="expense" class="active">Витрата</button>
+          <button type="button" data-type="income">Дохід</button>
+          <button type="button" data-type="transfer">Переказ</button>
+        </div>
+        <input type="date" name="date" required aria-label="Дата" />
+        <select name="category" id="txCategory" required aria-label="Стаття"></select>
+        <select name="wallet" id="txWallet" aria-label="Гаманець"></select>
+        <select name="toWallet" id="txToWallet" aria-label="Куди" hidden></select>
+        <input type="text" name="amount" inputmode="decimal" autocomplete="off" placeholder="Сума, ₴" required aria-label="Сума" />
+        <input type="text" name="note" placeholder="Нотатка" maxlength="120" aria-label="Нотатка" />
+        <button class="btn-primary" type="submit">Додати</button>
+        <button class="btn" type="button" id="repeatLast" title="Повторити останню операцію">⟲</button>
+        <button class="btn" type="button" id="aiBtn" hidden>✎ Текстом</button>
+      </form>
+
+      <div class="ai-panel" id="aiPanel" hidden>
+        <div class="ai-modes" role="group" aria-label="Режим">
+          <button class="btn active" type="button" data-aimode="write">Записати</button>
+          <button class="btn" type="button" data-aimode="ask">Спитати</button>
+        </div>
+        <textarea id="aiInput" rows="2" aria-label="Текст"></textarea>
+        <div class="ai-actions">
+          <button class="btn-primary" type="button" id="aiRun">Розібрати</button>
+          <button class="btn" type="button" id="aiStop" hidden>Стоп</button>
+          <button class="icon-btn" type="button" id="aiClose" aria-label="Закрити">✕</button>
+        </div>
+        <div class="ai-status" id="aiStatus"></div>
+        <div class="ai-draft" id="aiDraft"></div>
+        <div class="ai-answer" id="aiAnswer" hidden></div>
+      </div>
+
+      <div class="search-bar">
+        <input type="search" id="searchText" placeholder="Пошук по нотатці…" aria-label="Пошук" />
+        <select id="searchCat" aria-label="Стаття"><option value="">Усі статті</option></select>
+        <input type="text" id="searchMin" inputmode="decimal" placeholder="від, ₴" aria-label="Сума від" />
+        <input type="text" id="searchMax" inputmode="decimal" placeholder="до, ₴" aria-label="Сума до" />
+        <input type="date" id="searchFrom" aria-label="Дата від" />
+        <input type="date" id="searchTo" aria-label="Дата до" />
+        <button class="btn" type="button" id="searchReset">Скинути фільтр</button>
+      </div>
+      <div class="filter-note" id="filterNote" hidden></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Дата</th><th>Стаття</th><th>Гаманець</th><th>Нотатка</th><th class="num">Сума</th><th></th></tr>
+          </thead>
+          <tbody id="txBody"></tbody>
+        </table>
+      </div>
+      <div class="empty-note" id="txEmpty" hidden>Тут порожньо, паши давай.</div>
+    </section>
+  </section>
+
+  <section class="view" id="view-year" hidden>
+    <div class="ledger-head">
+      <h2>Рік</h2>
+      <div class="month-nav">
+        <button class="icon-btn" type="button" id="prevYear" aria-label="Попередній рік">‹</button>
+        <span class="month-label" id="yearLabel"></span>
+        <button class="icon-btn" type="button" id="nextYear" aria-label="Наступний рік">›</button>
+      </div>
+    </div>
+    <div class="bento bento-year" id="yearTotals"></div>
+    <section class="panel"><div id="yearTable"></div></section>
+  </section>
+
+  <section class="view" id="view-plan" hidden>
+    <div class="grid-2">
+      <section class="panel">
+        <div class="panel-head"><h2>Регулярні</h2><button class="btn" type="button" id="addRecBtn">+ платіж</button></div>
+        <form id="recForm" class="stack-form" hidden>
+          <input type="text" name="name" placeholder="Назва" maxlength="60" required />
+          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
+          <select name="category" id="recCategory" aria-label="Стаття"></select>
+          <select name="wallet" id="recWallet" aria-label="Гаманець"></select>
+          <input type="number" name="day" min="1" max="31" placeholder="День місяця" required />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="recList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Амортизація</h2><button class="btn" type="button" id="addAmBtn">+ витрата</button></div>
+        <p class="panel-note">Рідкі великі витрати, розкидані по місяцях.</p>
+        <form id="amForm" class="stack-form" hidden>
+          <input type="text" name="name" placeholder="Напр. страховка" maxlength="60" required />
+          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
+          <input type="number" name="months" min="1" max="120" placeholder="Раз на N місяців" required />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="amList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Борги</h2><button class="btn" type="button" id="addDebtBtn">+ борг</button></div>
+        <p class="panel-note">Окремо від витрат — у статистику не йдуть.</p>
+        <form id="debtForm" class="stack-form" hidden>
+          <select name="direction" aria-label="Напрям">
+            <option value="lent">Позичив я</option>
+            <option value="borrowed">Позичили мені</option>
+          </select>
+          <input type="text" name="person" placeholder="Кому / хто" maxlength="60" required />
+          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
+          <input type="date" name="due" aria-label="Повернути до" />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="debtList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Налаштування</h2></div>
+        <label class="setting-row"><span>Дні ЗП (через кому)</span>
+          <input type="text" id="salaryDays" inputmode="numeric" placeholder="5, 20" /></label>
+        <label class="setting-row"><span>Спокійний режим</span>
+          <input type="checkbox" id="calmMode" /></label>
+        <label class="setting-row"><span>PIN на вхід</span>
+          <input type="text" id="pinSet" inputmode="numeric" maxlength="12" placeholder="порожньо = вимкнено" /></label>
+        <div class="setting-actions">
+          <button class="btn" type="button" id="btnBackup">Зберегти копію</button>
+          <button class="btn" type="button" id="btnCsv">Експорт у CSV</button>
+          <button class="btn" type="button" id="btnRestore">Відновити з копії</button>
+          <input type="file" id="restoreFile" accept="application/json,.json" hidden />
+        </div>
+        <div class="records" id="recordsBox"></div>
+      </section>
+    </div>
+  </section>
+
+  <footer class="note">
+    Общак під замком — бачиш тільки ти.
+    <span class="signature">Копійка</span>
+  </footer>
+</div>
+
+<div class="chart-tip" id="chartTip"></div>
+<div class="toast-stack" id="toastStack"></div>
+<div class="confirm-back" id="confirmBack" hidden>
+  <div class="confirm-box">
+    <p id="confirmText"></p>
+    <div class="confirm-actions">
+      <button class="btn" type="button" id="confirmNo">Скасувати</button>
+      <button class="btn-primary" type="button" id="confirmYes">Так</button>
+    </div>
+  </div>
+</div>

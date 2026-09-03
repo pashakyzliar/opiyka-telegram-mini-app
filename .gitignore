@@ -1,0 +1,5 @@
+server/.env
+server/data/users.json
+server/data/*.tmp-*
+web/src/kopiyka.html
+web/src/test-kopiyka.html

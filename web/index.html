@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#efe9d9">
+  <title>Копійка</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bad+Script&family=Oswald:wght@400;500;600;700&family=Rubik+Mono+One&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext">
+  <link rel="stylesheet" href="./src/style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="./config.js"></script>
+</head>
+<body>
+  <noscript>Для роботи Копійки потрібен JavaScript.</noscript>
+  <script>
+    (async function () {
+      try {
+        var markup = await fetch("./src/markup.html", { cache: "no-store" }).then(function (r) {
+          if (!r.ok) throw new Error("markup: " + r.status);
+          return r.text();
+        });
+        document.body.insertAdjacentHTML("afterbegin", markup);
+        var scripts = [
+          "./telegram-adapter.js",
+          "./src/vendor/gsap.min.js",
+          "./src/vendor/Flip.min.js",
+          "./src/anim.js",
+          "./src/app.js"
+        ];
+        for (var i = 0; i < scripts.length; i++) {
+          await new Promise(function (resolve, reject) {
+            var el = document.createElement("script");
+            el.src = scripts[i];
+            el.onload = resolve;
+            el.onerror = function () { reject(new Error("script: " + scripts[i])); };
+            document.body.appendChild(el);
+          });
+        }
+      } catch (err) {
+        document.body.innerHTML = "<main style=\"padding:24px;font:16px system-ui\">Копійка не завантажилась. Перезапусти Mini App.</main>";
+        console.error(err);
+      }
+    })();
+  </script>
+</body>
+</html>
