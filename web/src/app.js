@@ -606,16 +606,18 @@
       else txByDay[t.date].regular += t.amount;
     });
 
-    for (var d = monthStart(currentMk); d <= end; d = isoAdd(d, 1)) {
+    // Build the carry from the current month's start up to the week start.
+    // The visible week may begin in the previous month, so it must not be
+    // inferred from the number of items produced by this loop.
+    for (var d = monthStart(currentMk); d < start; d = isoAdd(d, 1)) {
       if (d >= currentMonthEnd) carry = 0;
+      var beforeWeekDay = txByDay[d] || { regular: 0, reserve: 0 };
+      carry = round2(carry + plannedForDay(d) - beforeWeekDay.regular);
+    }
+
+    for (var d = start; d <= end; d = isoAdd(d, 1)) {
       var day = txByDay[d] || { regular: 0, reserve: 0 };
       var planned = plannedForDay(d);
-      if (d < start) {
-        carry = round2(carry + planned - day.regular);
-        if (inRange(d, start, end)) reserveSpent += day.reserve;
-        continue;
-      }
-      if (d > end) break;
       reserveSpent += day.reserve;
       var available = round2(carry + planned);
       var carryOut = round2(available - day.regular);
@@ -635,23 +637,6 @@
         ok: carryOut >= 0
       });
       carry = carryOut;
-    }
-
-    while (items.length < 7) {
-      var padDate = isoAdd(start, items.length);
-      items.push({
-        date: padDate,
-        planned: plannedForDay(padDate),
-        spent: 0,
-        reserveSpent: 0,
-        available: 0,
-        carryOut: 0,
-        isPast: padDate < today,
-        isToday: padDate === today,
-        isFuture: padDate > today,
-        inMonth: false,
-        ok: true
-      });
     }
 
     return {
