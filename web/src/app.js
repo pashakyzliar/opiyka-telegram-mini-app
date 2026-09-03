@@ -544,16 +544,20 @@
   function allowance() {
     var today = todayISO();
     var currentMk = monthKey(today);
+    var currentMonthEnd = isoAdd(monthStart(addMonths(currentMk, 1)), -1);
     var viewIsCurrent = state.viewMonth === currentMk;
     var s = settings();
     var enabled = !!s.allowanceEnabled;
     var hasPlan = s.weekBudget > 0 || s.weekReserve > 0 || sumWeekDaily(s.weekDaily) > 0;
-    var spentToday = 0, spentBeforeToday = 0, reserveSpent = 0;
+    var spentToday = 0, spentBeforeToday = 0, monthSpent = 0, weekSpent = 0, reserveSpent = 0;
     var reserveFrom = weekStart(today);
     var reserveTo = weekEnd(today);
     var reserveStart = reserveFrom < monthStart(currentMk) ? monthStart(currentMk) : reserveFrom;
-    monthTx(currentMk).forEach(function (t) {
+    state.transactions.forEach(function (t) {
       if (!isExpense(t)) return;
+      if (monthKey(t.date) === currentMk) monthSpent += t.amount;
+      if (inRange(t.date, reserveFrom, reserveTo) && !t.reserve) weekSpent += t.amount;
+      if (monthKey(t.date) !== currentMk) return;
       if (t.reserve) {
         if (inRange(t.date, reserveStart, reserveTo)) reserveSpent += t.amount;
         return;
@@ -565,6 +569,12 @@
     for (var d = monthStart(currentMk); d <= today; d = isoAdd(d, 1)) planThroughToday += plannedForDay(d);
     var todayLimit = round2(planThroughToday - spentBeforeToday);
     var todayAvailable = round2(todayLimit - spentToday);
+    var weekPlanThroughToday = 0;
+    for (var wd = reserveFrom; wd <= today; wd = isoAdd(wd, 1)) weekPlanThroughToday += plannedForDay(wd);
+    var weekAvailable = round2(weekPlanThroughToday - weekSpent);
+    var monthPlan = 0;
+    for (var md = monthStart(currentMk); md <= currentMonthEnd; md = isoAdd(md, 1)) monthPlan += plannedForDay(md);
+    var monthAvailable = round2(monthPlan - monthSpent);
     var tomorrow = isoAdd(today, 1);
     var tomorrowAvailable = null;
     if (monthKey(tomorrow) === currentMk) tomorrowAvailable = round2(todayAvailable + plannedForDay(tomorrow));
@@ -576,6 +586,11 @@
       todayPlanned: plannedForDay(today),
       todayLimit: todayLimit,
       todayAvailable: todayAvailable,
+      weekAvailable: weekAvailable,
+      weekPlanThroughToday: round2(weekPlanThroughToday),
+      monthAvailable: monthAvailable,
+      monthSpent: round2(monthSpent),
+      monthPlan: round2(monthPlan),
       tomorrowAvailable: tomorrowAvailable,
       spentToday: spentToday,
       overBy: Math.max(0, round2(-todayAvailable)),
@@ -769,15 +784,25 @@
   function renderAllowance() {
     var a = allowance();
     var card = document.getElementById("allowanceCard");
+    var monthlyCard = document.getElementById("monthlyForecastCard");
     var bento = card ? card.closest(".bento") : null;
     var show = state.view === "main" && a.active && a.enabled;
     if (card) card.hidden = !show;
+    if (monthlyCard) monthlyCard.hidden = !show;
     if (bento) bento.dataset.allowance = show ? "on" : "off";
     if (!show) return;
     var el = document.getElementById("allowanceValue");
-    var visible = a.active && a.configured ? Math.max(0, a.todayAvailable) : 0;
+    var visible = a.active && a.configured ? Math.max(0, a.weekAvailable) : 0;
     animateValue(el, prevStat.allowance, visible, fmt, true);
     prevStat.allowance = visible;
+    var monthlyVisible = a.active && a.configured ? Math.max(0, a.todayAvailable) : 0;
+    var monthlyEl = document.getElementById("monthlyForecastValue");
+    animateValue(monthlyEl, null, monthlyVisible, fmt, true);
+    document.getElementById("monthlyForecastBasis").textContent = "місячний залишок";
+    document.getElementById("monthlyForecastSpent").textContent = "Сьогодні витрачено " + fmtShort(a.spentToday);
+    document.getElementById("monthlyForecastHint").textContent = a.todayAvailable < 0 ? " · перевищення " + fmtShort(a.overBy) : "";
+    document.getElementById("monthlyForecastBar").style.width = (a.todayLimit > 0 ? Math.min(100, (a.spentToday / a.todayLimit) * 100) : 0) + "%";
+    document.getElementById("monthlyForecastBar").classList.toggle("over", a.todayAvailable < 0);
     if (!a.active) {
       document.getElementById("allowanceBasis").textContent = "лише для поточного місяця";
       document.getElementById("allowanceSpentToday").textContent = "Перемкнись на поточний місяць";
@@ -806,7 +831,7 @@
       return;
     }
     document.getElementById("allowanceBasis").textContent =
-      "план " + fmtShort(a.todayPlanned) + " · резерв " + fmtShort(Math.max(0, a.reserveLeft));
+      "тижневий залишок";
     document.getElementById("allowanceSpentToday").textContent = "Сьогодні витрачено " + fmtShort(a.spentToday);
     var over = a.todayAvailable < 0;
     card.classList.toggle("over", over);
