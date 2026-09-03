@@ -1517,7 +1517,7 @@
       salaryDaysList.innerHTML = s.salaryDays.map(function (day, index) {
         var date = currentMonth + '-' + pad(day);
         var payment = s.salaryPayments.find(function (p) { return p.date === date; });
-        var status = payment ? (payment.actual === 0 ? '✕' : Math.abs(payment.actual - payment.expected) < 0.01 ? '✓' : '●') : '';
+        var status = payment ? (payment.actual === 0 ? '✕ ' + fmtShort(payment.expected) : (Math.abs(payment.actual - payment.expected) < 0.01 ? '✓ ' : '● ') + fmtShort(payment.actual) + ' / ' + fmtShort(payment.expected)) : '';
         return '<label class="setting-row"><span>Виплата ' + (index + 1) + ' ' + status + '</span><input type="date" data-salary-day="' + index + '" value="' + date + '" /></label>';
       }).join("");
     }
