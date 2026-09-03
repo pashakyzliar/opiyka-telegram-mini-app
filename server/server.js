@@ -18,6 +18,15 @@ const WEB_ROOT = path.resolve(__dirname, "..", "web");
 const DATA_FILE = path.resolve(process.env.DATA_FILE || path.join(__dirname, "data", "users.json"));
 const MAX_BODY = 2 * 1024 * 1024;
 const COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
+const DEFAULT_EXPENSE_CATEGORIES = [
+  { name: "Машина", color: "#5aa8ba" },
+  { name: "Пайка", color: "#c08a4a" },
+  { name: "Хавка", color: "#63b06e" },
+  { name: "Дурка", color: "#b07dad" },
+  { name: "Продукти", color: "#d29a5c" },
+  { name: "Сіги", color: "#97a851" },
+  { name: "Подпіски", color: "#7d8ecb" }
+];
 
 function loadDotEnv(file) {
   if (!existsSync(file)) return;
@@ -34,7 +43,22 @@ function loadDotEnv(file) {
 }
 
 function defaultSettings() {
-  return { budgets: {}, salaryDays: [5, 20], calmMode: false, pin: "", lastBackup: 0, streakRecord: 0, bestRate: null };
+  return {
+    budgets: {},
+    expenseCategories: DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color })),
+    salaryAmount: 0,
+    salaryDays: [5, 20],
+    allowanceEnabled: false,
+    weekBudget: 0,
+    weekReserve: 0,
+    weekDaily: [0, 0, 0, 0, 0, 0, 0],
+    navarHistory: [],
+    calmMode: false,
+    pin: "",
+    lastBackup: 0,
+    streakRecord: 0,
+    bestRate: null
+  };
 }
 
 function emptyAccount() {
@@ -55,7 +79,45 @@ function normalizeAccount(value) {
   }
   account.settings = Object.assign(defaultSettings(), account.settings || {});
   account.settings.budgets = Object.assign({}, account.settings.budgets || {});
+  account.settings.expenseCategories = normalizeExpenseCategories(account.settings.expenseCategories);
+  account.settings.allowanceEnabled = !!account.settings.allowanceEnabled;
+  account.settings.salaryAmount = Math.max(0, Number(account.settings.salaryAmount) || 0);
+  account.settings.weekBudget = Math.max(0, Number(account.settings.weekBudget) || 0);
+  account.settings.weekReserve = Math.max(0, Number(account.settings.weekReserve) || 0);
+  account.settings.weekDaily = Array.isArray(account.settings.weekDaily)
+    ? account.settings.weekDaily.slice(0, 7).map((value) => Math.max(0, Number(value) || 0)).concat([0, 0, 0, 0, 0, 0, 0]).slice(0, 7)
+    : [0, 0, 0, 0, 0, 0, 0];
+  account.settings.navarHistory = Array.isArray(account.settings.navarHistory)
+    ? account.settings.navarHistory
+        .map((row) => ({
+          id: String((row && row.id) || ("navar." + String((row && row.month) || "").replace("-", "_"))),
+          month: String((row && row.month) || "").slice(0, 7),
+          amount: Math.max(0, Number(row && row.amount) || 0),
+          createdAt: row && row.createdAt ? String(row.createdAt) : new Date().toISOString()
+        }))
+        .filter((row) => /^\d{4}-\d{2}$/.test(row.month))
+    : [];
   return account;
+}
+
+function normalizeExpenseCategories(list) {
+  const source = Array.isArray(list) && list.length ? list : DEFAULT_EXPENSE_CATEGORIES;
+  const out = [];
+  const seen = new Set();
+  source.forEach((row, index) => {
+    const fallback = DEFAULT_EXPENSE_CATEGORIES[index % DEFAULT_EXPENSE_CATEGORIES.length];
+    const name = String(row && typeof row === "object" ? row.name : row || "").replace(/\s+/g, " ").trim().slice(0, 28);
+    if (!name) return;
+    const key = name.toLocaleLowerCase("uk-UA");
+    if (seen.has(key)) return;
+    seen.add(key);
+    const rawColor = String(row && row.color ? row.color : "").trim().toLowerCase();
+    out.push({
+      name,
+      color: /^#[0-9a-f]{6}$/.test(rawColor) ? rawColor : fallback.color
+    });
+  });
+  return out.length ? out : DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color }));
 }
 
 async function readStore() {
@@ -266,8 +328,7 @@ async function api(req, res, pathname) {
 
   if (req.method === "PUT" && pathname === "/api/settings") {
     const payload = await bodyJson(req);
-    account.settings = Object.assign(defaultSettings(), account.settings, payload || {});
-    account.settings.budgets = Object.assign({}, account.settings.budgets || {});
+    account.settings = normalizeAccount({ settings: Object.assign(defaultSettings(), account.settings, payload || {}) }).settings;
     await persistStore(store);
     return json(res, 200, { ok: true });
   }
@@ -279,7 +340,7 @@ async function api(req, res, pathname) {
     account.recurring = cleanRows(payload.recurring);
     account.debts = cleanRows(payload.debts);
     account.amortize = cleanRows(payload.amortize);
-    account.settings = Object.assign(defaultSettings(), payload.settings || {});
+    account.settings = normalizeAccount({ settings: Object.assign(defaultSettings(), payload.settings || {}) }).settings;
     await persistStore(store);
     return json(res, 200, { ok: true });
   }

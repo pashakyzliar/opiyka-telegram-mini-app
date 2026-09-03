@@ -4,16 +4,21 @@
   /* ============================ constants ============================ */
 
   var EXPENSE_CATS = ["Машина", "Пайка", "Хавка", "Дурка", "Продукти", "Сіги", "Подпіски"];
+  var DEFAULT_EXPENSE_CATEGORY_ROWS = [
+    { name: "Машина", color: "#5aa8ba" },
+    { name: "Пайка", color: "#c08a4a" },
+    { name: "Хавка", color: "#63b06e" },
+    { name: "Дурка", color: "#b07dad" },
+    { name: "Продукти", color: "#d29a5c" },
+    { name: "Сіги", color: "#97a851" },
+    { name: "Подпіски", color: "#7d8ecb" }
+  ];
   var INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
   var WALLETS = ["Кеш"];
  
   var LS_KEY = "kopiyka_v2";
   var COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
 
-  var CAT_VAR = {
-    "Машина": "--cat-1", "Пайка": "--cat-2", "Хавка": "--cat-3", "Дурка": "--cat-4",
-    "Продукти": "--cat-5", "Сіги": "--cat-6", "Подпіски": "--cat-7"
-  };
   var INC_VAR = { "Карта": "--inc-card", "Кеш": "--inc-cash" };
 
   /* ============================ helpers ============================ */
@@ -65,9 +70,10 @@
   } catch (e) {}
   function colorFor(type, cat) {
     if (type === "income") return css("--positive");
-    
-    var v = CAT_VAR[cat];
-    return v ? css(v) : css("--ink-muted");
+    var meta = expenseCats().find(function (row) { return row.name === cat; });
+    if (meta && meta.color) return meta.color;
+    var fallback = DEFAULT_EXPENSE_CATEGORY_ROWS.find(function (row) { return row.name === cat; });
+    return fallback ? fallback.color : css("--ink-muted");
   }
   function walletColor(w) { var v = INC_VAR[w]; return v ? css(v) : css("--ink-muted"); }
 
@@ -109,6 +115,128 @@
     var da = Date.UTC(+pa[0], +pa[1] - 1, +pa[2]), db = Date.UTC(+pb[0], +pb[1] - 1, +pb[2]);
     return Math.round((db - da) / 86400000);
   }
+  function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
+  function weekdayIndex(iso) {
+    var d = new Date(iso + "T00:00:00");
+    return (d.getDay() + 6) % 7;
+  }
+  function monthStart(mk) { return mk + "-01"; }
+  function weekStart(iso) { return isoAdd(iso, -weekdayIndex(iso)); }
+  function weekEnd(iso) { return isoAdd(iso, 6 - weekdayIndex(iso)); }
+  function sameOrAfter(a, b) { return dayDiff(b, a) >= 0; }
+  function sameOrBefore(a, b) { return dayDiff(a, b) >= 0; }
+  function inRange(iso, from, to) { return sameOrAfter(iso, from) && sameOrBefore(iso, to); }
+  function normalizeWeekDaily(list) {
+    var out = [0, 0, 0, 0, 0, 0, 0];
+    if (!Array.isArray(list)) return out;
+    for (var i = 0; i < 7; i++) out[i] = Math.max(0, round2(list[i]));
+    return out;
+  }
+  function normalizeNavarHistory(list) {
+    return (Array.isArray(list) ? list : []).map(function (row) {
+      return {
+        id: String((row && row.id) || ("navar." + String((row && row.month) || "").replace("-", "_"))),
+        month: String((row && row.month) || "").slice(0, 7),
+        amount: Math.max(0, round2(row && row.amount)),
+        createdAt: row && row.createdAt ? String(row.createdAt) : new Date().toISOString()
+      };
+    }).filter(function (row) { return /^\d{4}-\d{2}$/.test(row.month); })
+      .sort(function (a, b) { return a.month < b.month ? -1 : 1; });
+  }
+  function normalizeExpenseCategoryName(raw) {
+    return String(raw == null ? "" : raw).replace(/\s+/g, " ").trim().slice(0, 28);
+  }
+  function normalizeExpenseCategoryColor(raw, fallback) {
+    var color = String(raw == null ? "" : raw).trim().toLowerCase();
+    if (/^#[0-9a-f]{6}$/.test(color)) return color;
+    return fallback;
+  }
+  function cloneDefaultExpenseCategories() {
+    return DEFAULT_EXPENSE_CATEGORY_ROWS.map(function (row) {
+      return { name: row.name, color: row.color };
+    });
+  }
+  function normalizeExpenseCategories(list) {
+    var source = Array.isArray(list) && list.length ? list : cloneDefaultExpenseCategories();
+    var out = [];
+    var seen = Object.create(null);
+    source.forEach(function (row, idx) {
+      var fallback = DEFAULT_EXPENSE_CATEGORY_ROWS[idx % DEFAULT_EXPENSE_CATEGORY_ROWS.length] || DEFAULT_EXPENSE_CATEGORY_ROWS[0];
+      var name = normalizeExpenseCategoryName(row && typeof row === "object" ? row.name : row);
+      if (!name) return;
+      var key = name.toLocaleLowerCase("uk-UA");
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push({
+        name: name,
+        color: normalizeExpenseCategoryColor(row && row.color, fallback.color)
+      });
+    });
+    return out.length ? out : cloneDefaultExpenseCategories();
+  }
+  function expenseCats() {
+    var s = settings();
+    s.expenseCategories = normalizeExpenseCategories(s.expenseCategories);
+    return s.expenseCategories;
+  }
+  function expenseCatNames() {
+    return expenseCats().map(function (row) { return row.name; });
+  }
+  function defaultExpenseCategory() {
+    return expenseCats()[0] || cloneDefaultExpenseCategories()[0];
+  }
+  function defaultExpenseName() {
+    return defaultExpenseCategory().name;
+  }
+  function sumWeekDaily(list) {
+    return normalizeWeekDaily(list).reduce(function (s, v) { return s + v; }, 0);
+  }
+  function plannedForDay(iso) {
+    return normalizeWeekDaily(settings().weekDaily)[weekdayIndex(iso)] || 0;
+  }
+  function salaryDaysForMonth(mk) {
+    var p = mk.split("-");
+    var y = +p[0], m = +p[1];
+    var maxDay = daysInMonth(y, m);
+    var uniq = {};
+    return settings().salaryDays
+      .map(function (d) { return Math.min(maxDay, Math.max(1, Number(d) || 1)); })
+      .filter(function (d) {
+        var k = String(d);
+        if (uniq[k]) return false;
+        uniq[k] = true;
+        return true;
+      })
+      .sort(function (a, b) { return a - b; });
+  }
+  function plannedSalary(mk) {
+    var total = Math.max(0, round2(settings().salaryAmount));
+    if (!total) return 0;
+    return total;
+  }
+  function payoutLabel(mk) {
+    var days = salaryDaysForMonth(mk);
+    if (!days.length) return "дні не задані";
+    return days.map(function (d) { return pad(d) + "." + mk.slice(5, 7); }).join(" · ");
+  }
+  function navarHistory() { return normalizeNavarHistory(settings().navarHistory); }
+  function totalNavar() {
+    return navarHistory().reduce(function (s, row) { return s + row.amount; }, 0);
+  }
+  function monthActuals(mk) {
+    var tx = monthTx(mk);
+    var income = sum(tx.filter(isIncome));
+    var expense = sum(tx.filter(isExpense));
+    return { income: income, expense: expense, net: income - expense };
+  }
+  function monthProjectedCarry(mk) {
+    return Math.max(0, round2(monthActuals(mk).net));
+  }
+  function navarDeductedByMonth(mk) {
+    return navarHistory().reduce(function (s, row) {
+      return addMonths(row.month, 1) <= mk ? s + row.amount : s;
+    }, 0);
+  }
 
   /* ============================ state ============================ */
 
@@ -127,12 +255,34 @@
   var prevStat = { balance: null, income: null, expense: null, savings: null, allowance: null };
 
   function defaultSettings() {
-    return { budgets: {}, salaryDays: [5, 20], calmMode: false, pin: "", lastBackup: 0, streakRecord: 0, bestRate: null };
+    return {
+      budgets: {},
+      expenseCategories: cloneDefaultExpenseCategories(),
+      salaryAmount: 0,
+      salaryDays: [5, 20],
+      allowanceEnabled: false,
+      weekBudget: 0,
+      weekReserve: 0,
+      weekDaily: [0, 0, 0, 0, 0, 0, 0],
+      navarHistory: [],
+      calmMode: false,
+      pin: "",
+      lastBackup: 0,
+      streakRecord: 0,
+      bestRate: null
+    };
   }
   function settings() {
     var s = state.settings || {};
     if (!s.budgets) s.budgets = {};
+    s.expenseCategories = normalizeExpenseCategories(s.expenseCategories);
     if (!Array.isArray(s.salaryDays) || !s.salaryDays.length) s.salaryDays = [5, 20];
+    s.allowanceEnabled = !!s.allowanceEnabled;
+    s.salaryAmount = Math.max(0, round2(s.salaryAmount));
+    s.weekBudget = Math.max(0, round2(s.weekBudget));
+    s.weekReserve = Math.max(0, round2(s.weekReserve));
+    s.weekDaily = normalizeWeekDaily(s.weekDaily);
+    s.navarHistory = normalizeNavarHistory(s.navarHistory);
     return s;
   }
 
@@ -323,7 +473,6 @@
   function isExpense(t) { return t.type === "expense"; }
   function isIncome(t) { return t.type === "income"; }
   function isTransfer(t) { return t.type === "transfer"; }
-
   // One render pass asks for the same month a dozen times over (stats, donut,
   // trend, ticker, delta...). Slice once per pass instead of re-filtering the
   // whole journal each time.
@@ -345,7 +494,7 @@
       if (isIncome(t)) return s + t.amount;
       if (isExpense(t)) return s - t.amount;
       return s;
-    }, 0);
+    }, 0) - totalNavar();
   }
   function walletBalance(w) {
     return state.transactions.reduce(function (s, t) {
@@ -357,19 +506,6 @@
       }
       return s;
     }, 0);
-  }
-
-  function nextSalaryDate(fromISO) {
-    var days = settings().salaryDays.slice().sort(function (a, b) { return a - b; });
-    var p = fromISO.split("-");
-    var y = +p[0], m = +p[1], d = +p[2];
-    for (var i = 0; i < days.length; i++) {
-      var dd = Math.min(days[i], daysInMonth(y, m));
-      if (dd > d) return y + "-" + pad(m) + "-" + pad(dd);
-    }
-    var nm = m === 12 ? 1 : m + 1, ny = m === 12 ? y + 1 : y;
-    var first = Math.min(days[0], daysInMonth(ny, nm));
-    return ny + "-" + pad(nm) + "-" + pad(first);
   }
 
   // Every recurring charge still to fall between today and the next payday.
@@ -407,14 +543,124 @@
 
   function allowance() {
     var today = todayISO();
-    var pay = nextSalaryDate(today);
-    var daysLeft = Math.max(1, dayDiff(today, pay));
-    var pend = pendingRecurring(today, pay);
-    var pendSum = pend.reduce(function (s, x) { return s + (Number(x.rec.amount) || 0); }, 0);
-    var free = totalBalance() - pendSum;
-    var per = free / daysLeft;
-    var spentToday = sum(state.transactions.filter(function (t) { return isExpense(t) && t.date === today; }));
-    return { pay: pay, daysLeft: daysLeft, pendSum: pendSum, free: free, per: per, spentToday: spentToday };
+    var currentMk = monthKey(today);
+    var viewIsCurrent = state.viewMonth === currentMk;
+    var s = settings();
+    var enabled = !!s.allowanceEnabled;
+    var hasPlan = s.weekBudget > 0 || s.weekReserve > 0 || sumWeekDaily(s.weekDaily) > 0;
+    var spentToday = 0, spentBeforeToday = 0, reserveSpent = 0;
+    var reserveFrom = weekStart(today);
+    var reserveTo = weekEnd(today);
+    var reserveStart = reserveFrom < monthStart(currentMk) ? monthStart(currentMk) : reserveFrom;
+    monthTx(currentMk).forEach(function (t) {
+      if (!isExpense(t)) return;
+      if (t.reserve) {
+        if (inRange(t.date, reserveStart, reserveTo)) reserveSpent += t.amount;
+        return;
+      }
+      if (t.date < today) spentBeforeToday += t.amount;
+      else if (t.date === today) spentToday += t.amount;
+    });
+    var planThroughToday = 0;
+    for (var d = monthStart(currentMk); d <= today; d = isoAdd(d, 1)) planThroughToday += plannedForDay(d);
+    var todayLimit = round2(planThroughToday - spentBeforeToday);
+    var todayAvailable = round2(todayLimit - spentToday);
+    var tomorrow = isoAdd(today, 1);
+    var tomorrowAvailable = null;
+    if (monthKey(tomorrow) === currentMk) tomorrowAvailable = round2(todayAvailable + plannedForDay(tomorrow));
+    return {
+      active: viewIsCurrent,
+      enabled: enabled,
+      configured: enabled && hasPlan,
+      today: today,
+      todayPlanned: plannedForDay(today),
+      todayLimit: todayLimit,
+      todayAvailable: todayAvailable,
+      tomorrowAvailable: tomorrowAvailable,
+      spentToday: spentToday,
+      overBy: Math.max(0, round2(-todayAvailable)),
+      reserveSpent: round2(reserveSpent),
+      reserveLeft: round2(s.weekReserve - reserveSpent),
+      weekPlan: round2(sumWeekDaily(s.weekDaily)),
+      weekBudget: round2(s.weekBudget),
+      weekReserve: round2(s.weekReserve),
+      weekGap: round2(s.weekBudget - (sumWeekDaily(s.weekDaily) + s.weekReserve))
+    };
+  }
+
+  function weekForecast() {
+    var today = todayISO();
+    var currentMk = monthKey(today);
+    var start = weekStart(today);
+    var end = weekEnd(today);
+    var currentMonthEnd = monthStart(addMonths(currentMk, 1));
+    var items = [];
+    var carry = 0;
+    var reserveSpent = 0;
+    var reserveTotal = Math.max(0, round2(settings().weekReserve));
+    var txByDay = {};
+    monthTx(currentMk).forEach(function (t) {
+      if (!isExpense(t)) return;
+      if (!txByDay[t.date]) txByDay[t.date] = { regular: 0, reserve: 0 };
+      if (t.reserve) txByDay[t.date].reserve += t.amount;
+      else txByDay[t.date].regular += t.amount;
+    });
+
+    for (var d = monthStart(currentMk); d <= end; d = isoAdd(d, 1)) {
+      if (d >= currentMonthEnd) carry = 0;
+      var day = txByDay[d] || { regular: 0, reserve: 0 };
+      var planned = plannedForDay(d);
+      if (d < start) {
+        carry = round2(carry + planned - day.regular);
+        if (inRange(d, start, end)) reserveSpent += day.reserve;
+        continue;
+      }
+      if (d > end) break;
+      reserveSpent += day.reserve;
+      var available = round2(carry + planned);
+      var carryOut = round2(available - day.regular);
+      var isPast = d < today;
+      var isToday = d === today;
+      items.push({
+        date: d,
+        planned: planned,
+        spent: round2(day.regular),
+        reserveSpent: round2(day.reserve),
+        available: available,
+        carryOut: carryOut,
+        isPast: isPast,
+        isToday: isToday,
+        isFuture: d > today,
+        inMonth: monthKey(d) === currentMk,
+        ok: carryOut >= 0
+      });
+      carry = carryOut;
+    }
+
+    while (items.length < 7) {
+      var padDate = isoAdd(start, items.length);
+      items.push({
+        date: padDate,
+        planned: plannedForDay(padDate),
+        spent: 0,
+        reserveSpent: 0,
+        available: 0,
+        carryOut: 0,
+        isPast: padDate < today,
+        isToday: padDate === today,
+        isFuture: padDate > today,
+        inMonth: false,
+        ok: true
+      });
+    }
+
+    return {
+      start: start,
+      end: end,
+      items: items.slice(0, 7),
+      reserveSpent: round2(reserveSpent),
+      reserveLeft: round2(reserveTotal - reserveSpent)
+    };
   }
 
   function streak() {
@@ -474,41 +720,35 @@
     animateValue(document.getElementById("statBalance"), prevStat.balance, balance, fmt, true);
     prevStat.balance = balance;
     var cash = balance;
+    var navarSum = totalNavar();
     document.getElementById("statBalanceSub").innerHTML =
-      
-      '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(cash)) + '</span>';
+      '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(cash)) + '</span>' +
+      '<span class="split-chip"><i style="background:' + css("--gold") + '"></i>Навар ' + esc(fmtShort(navarSum)) + '</span>';
 
-    var mtx = monthTx(state.viewMonth);
-    var income = sum(mtx.filter(isIncome));
-    var expense = sum(mtx.filter(isExpense));
+    var actual = monthActuals(state.viewMonth);
+    var income = plannedSalary(state.viewMonth) || actual.income;
+    var expense = actual.expense;
     animateValue(document.getElementById("statIncome"), prevStat.income, income, fmt);
     animateValue(document.getElementById("statExpense"), prevStat.expense, expense, fmt);
     prevStat.income = income; prevStat.expense = expense;
 
-    var net = income - expense;
-    // With no income at all a percentage of nothing is meaningless: say so
-    // instead of printing a confident 0%.
-    var rate = income > 0 ? Math.round((net / income) * 100) : null;
+    var projectedCarry = monthProjectedCarry(state.viewMonth);
     var savEl = document.getElementById("statSavings");
-    if (rate === null) {
-      animGen.set(savEl, (animGen.get(savEl) || 0) + 1);
-      savEl.textContent = expense > 0 ? "—" : "0%";
-      savEl.className = "cell-value money";
-      prevStat.savings = null;
-    } else {
-      animateValue(savEl, prevStat.savings, rate, function (v) { return Math.round(v) + "%"; });
-      savEl.className = "cell-value money" + (rate < 0 ? " negative" : rate > 0 ? " positive" : "");
-      prevStat.savings = rate;
+    if (savEl) {
+      animateValue(savEl, prevStat.savings, navarSum, fmt, true);
+      savEl.className = "cell-value money" + (navarSum > 0 ? " positive" : "");
     }
+    prevStat.savings = navarSum;
 
-    
     var inCash = income;
     document.getElementById("statIncomeSub").innerHTML =
-      
-      '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(inCash)) + '</span>';
-    document.getElementById("statExpenseSub").textContent = mtx.filter(isExpense).length + " списань";
-    document.getElementById("statSavingsSub").textContent =
-      rate === null && expense > 0 ? "доходу цього місяця нема" : "чистими " + fmtShort(net);
+      plannedSalary(state.viewMonth) > 0
+        ? '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>' + esc(payoutLabel(state.viewMonth)) + '</span>'
+        : '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>факт ' + esc(fmtShort(inCash)) + '</span>';
+    document.getElementById("statExpenseSub").textContent = monthTx(state.viewMonth).filter(isExpense).length + " списань";
+    var savSub = document.getElementById("statSavingsSub");
+    if (savSub) savSub.textContent =
+      projectedCarry > 0 ? "цього місяця піде " + fmtShort(projectedCarry) : "цього місяця переносу поки нема";
 
     var months = [];
     for (var i = 5; i >= 0; i--) months.push(addMonths(monthKey(todayISO()), -i));
@@ -518,7 +758,7 @@
     });
     var pts = months.map(function (mk) {
       running += monthTx(mk).reduce(function (s, t) { return s + (isIncome(t) ? t.amount : isExpense(t) ? -t.amount : 0); }, 0);
-      return running;
+      return running - navarDeductedByMonth(mk);
     });
     drawSpark(pts);
   }
@@ -543,31 +783,103 @@
 
   function renderAllowance() {
     var a = allowance();
-    var el = document.getElementById("allowanceValue");
-    animateValue(el, prevStat.allowance, a.per, fmt, true);
-    prevStat.allowance = a.per;
-    document.getElementById("allowanceBasis").textContent =
-      "до " + a.pay.split("-").reverse().slice(0, 2).join(".") + " · " + a.daysLeft + " дн.";
-    document.getElementById("allowanceSpentToday").textContent = "Сьогодні витрачено " + fmtShort(a.spentToday);
     var card = document.getElementById("allowanceCard");
-    var over = a.per > 0 && a.spentToday > a.per;
+    var bento = card ? card.closest(".bento") : null;
+    var show = state.view === "main" && a.active && a.enabled;
+    if (card) card.hidden = !show;
+    if (bento) bento.dataset.allowance = show ? "on" : "off";
+    if (!show) return;
+    var el = document.getElementById("allowanceValue");
+    var visible = a.active && a.configured ? Math.max(0, a.todayAvailable) : 0;
+    animateValue(el, prevStat.allowance, visible, fmt, true);
+    prevStat.allowance = visible;
+    if (!a.active) {
+      document.getElementById("allowanceBasis").textContent = "лише для поточного місяця";
+      document.getElementById("allowanceSpentToday").textContent = "Перемкнись на поточний місяць";
+      document.getElementById("allowanceHint").textContent = "архів не тягне денний прогноз";
+      document.getElementById("allowanceBar").style.width = "0%";
+      document.getElementById("allowanceBar").classList.remove("over");
+      card.classList.remove("over", "under");
+      return;
+    }
+    if (!a.enabled) {
+      document.getElementById("allowanceBasis").textContent = "прогноз вимкнено";
+      document.getElementById("allowanceSpentToday").textContent = "Увімкни функцію в налаштуваннях";
+      document.getElementById("allowanceHint").textContent = "після цього денний ліміт почне рахуватись";
+      document.getElementById("allowanceBar").style.width = "0%";
+      document.getElementById("allowanceBar").classList.remove("over");
+      card.classList.remove("over", "under");
+      return;
+    }
+    if (!a.configured) {
+      document.getElementById("allowanceBasis").textContent = "налаштуй тиждень";
+      document.getElementById("allowanceSpentToday").textContent = "Прогноз поки не задано";
+      document.getElementById("allowanceHint").textContent = "додай денні суми та резерв у налаштуваннях";
+      document.getElementById("allowanceBar").style.width = "0%";
+      document.getElementById("allowanceBar").classList.remove("over");
+      card.classList.remove("over", "under");
+      return;
+    }
+    document.getElementById("allowanceBasis").textContent =
+      "план " + fmtShort(a.todayPlanned) + " · резерв " + fmtShort(Math.max(0, a.reserveLeft));
+    document.getElementById("allowanceSpentToday").textContent = "Сьогодні витрачено " + fmtShort(a.spentToday);
+    var over = a.todayAvailable < 0;
     card.classList.toggle("over", over);
-    card.classList.toggle("under", !over && a.per > 0);
+    card.classList.toggle("under", !over && a.todayLimit > 0);
     document.getElementById("allowanceHint").textContent =
-      a.per <= 0 ? "вільних коштів нема" : over ? "норму перевищено" : "у межах норми";
-    var pct = a.per > 0 ? Math.min(100, (a.spentToday / a.per) * 100) : 100;
+      over
+        ? "переліміт " + fmtShort(a.overBy) + (a.tomorrowAvailable == null ? "" : " · завтра " + fmtShort(Math.max(0, a.tomorrowAvailable)))
+        : "до кінця дня лишається " + fmtShort(visible);
+    var pct = a.todayLimit > 0 ? Math.min(100, (a.spentToday / a.todayLimit) * 100) : 100;
     document.getElementById("allowanceBar").style.width = pct + "%";
     document.getElementById("allowanceBar").classList.toggle("over", over);
   }
 
+  function renderWeekForecast() {
+    var panel = document.getElementById("weekForecastPanel");
+    var meta = document.getElementById("weekForecastMeta");
+    var grid = document.getElementById("weekForecastGrid");
+    if (!panel || !meta || !grid) return;
+    var a = allowance();
+    var currentMk = monthKey(todayISO());
+    var show = state.view === "main" && state.viewMonth === currentMk && a.enabled;
+    panel.hidden = !show;
+    if (!show) return;
+
+    var week = weekForecast();
+    meta.textContent =
+      week.start.split("-").reverse().slice(0, 2).join(".") + " — " +
+      week.end.split("-").reverse().slice(0, 2).join(".") +
+      " · резерв " + fmtShort(Math.max(0, week.reserveLeft));
+
+    grid.innerHTML = week.items.map(function (item) {
+      var statusClass = item.isFuture ? "pending" : item.ok ? "ok" : "bad";
+      var statusMark = item.isFuture ? "·" : item.ok ? "✓" : "✕";
+      var dayLabel = new Date(item.date + "T00:00:00").toLocaleDateString("uk-UA", { weekday: "short" });
+      var dateLabel = item.date.slice(8) + "." + item.date.slice(5, 7);
+      var carryLabel = item.isFuture ? "старт " + fmtShort(Math.max(0, item.available)) : "далі " + fmtShort(Math.max(0, item.carryOut));
+      var spentCls = item.isFuture ? "" : item.ok ? "ok" : "bad";
+      return '<article class="week-day' + (item.isToday ? ' is-today' : '') + (!item.inMonth ? ' is-out' : '') + '">' +
+        '<div class="week-day-top"><span class="week-day-name">' + esc(dayLabel.replace(".", "").toUpperCase()) + '</span>' +
+        '<span class="week-day-date">' + esc(dateLabel) + '</span>' +
+        '<span class="week-day-status ' + statusClass + '">' + statusMark + '</span></div>' +
+        '<div class="week-day-money">' + esc(fmtShort(item.planned)) + '</div>' +
+        '<div class="week-day-lines">' +
+        '<span>факт <b class="' + spentCls + '">' + esc(fmtShort(item.spent)) + '</b></span>' +
+        (item.reserveSpent > 0 ? '<span>резерв ' + esc(fmtShort(item.reserveSpent)) + '</span>' : '<span>' + esc(carryLabel) + '</span>') +
+        '</div></article>';
+    }).join("");
+  }
+
   function renderBudgets() {
     var wrap = document.getElementById("budgetList");
+    if (!wrap) return;
     wrap.innerHTML = "";
     var mtx = monthTx(state.viewMonth).filter(isExpense);
     var spent = {};
     mtx.forEach(function (t) { spent[t.category] = (spent[t.category] || 0) + t.amount; });
     var budgets = settings().budgets;
-    EXPENSE_CATS.forEach(function (cat) {
+    expenseCatNames().forEach(function (cat) {
       var limit = Number(budgets[cat]) || 0;
       var s = spent[cat] || 0;
       var pct = limit > 0 ? Math.min(100, (s / limit) * 100) : (s > 0 ? 100 : 0);
@@ -601,10 +913,11 @@
 
   function renderDelta() {
     var wrap = document.getElementById("deltaList");
+    if (!wrap) return;
     var cur = {}, prev = {};
     monthTx(state.viewMonth).filter(isExpense).forEach(function (t) { cur[t.category] = (cur[t.category] || 0) + t.amount; });
     monthTx(addMonths(state.viewMonth, -1)).filter(isExpense).forEach(function (t) { prev[t.category] = (prev[t.category] || 0) + t.amount; });
-    var rows = EXPENSE_CATS.map(function (c) {
+    var rows = expenseCatNames().map(function (c) {
       var a = cur[c] || 0, b = prev[c] || 0;
       var pct = b > 0 ? Math.round(((a - b) / b) * 100) : (a > 0 ? null : 0);
       return { cat: c, now: a, was: b, pct: pct };
@@ -623,6 +936,7 @@
 
   function renderGoals() {
     var wrap = document.getElementById("goalsList");
+    if (!wrap) return;
     var open = state.goals.filter(function (g) { return !g.closedAt; });
     var closed = state.goals.filter(function (g) { return g.closedAt; });
     wrap.innerHTML = "";
@@ -664,6 +978,7 @@
     });
 
     var hof = document.getElementById("hallOfFame");
+    if (!hof) return;
     if (!closed.length) { hof.innerHTML = ""; return; }
     hof.innerHTML = '<div class="hof-title">Зал слави</div>' + closed.map(function (g) {
       return '<div class="hof-row"><span class="seal">✔</span><span class="hof-name">' + esc(g.name) + '</span>' +
@@ -683,10 +998,11 @@
   function renderDonut() {
     var wrap = document.getElementById("donutWrap");
     var tip = document.getElementById("chartTip");
+    if (!wrap || !tip) return;
     var mtx = monthTx(state.viewMonth).filter(isExpense);
     var totals = {};
     mtx.forEach(function (t) { totals[t.category] = (totals[t.category] || 0) + t.amount; });
-    var entries = EXPENSE_CATS.map(function (c) { return { cat: c, amt: totals[c] || 0 }; })
+    var entries = expenseCatNames().map(function (c) { return { cat: c, amt: totals[c] || 0 }; })
       .filter(function (e) { return e.amt > 0; });
     var total = entries.reduce(function (s, e) { return s + e.amt; }, 0);
     document.getElementById("donutNote").textContent = entries.length ? entries.length + " статей" : "поки чисто";
@@ -745,11 +1061,13 @@
 
   function renderUpcoming() {
     var wrap = document.getElementById("upcomingList");
+    var note = document.getElementById("upcomingNote");
+    if (!wrap || !note) return;
     var today = todayISO();
     var p = today.split("-");
     var endOfMonth = p[0] + "-" + p[1] + "-" + pad(daysInMonth(+p[0], +p[1]));
     var list = pendingRecurring(today, endOfMonth);
-    document.getElementById("upcomingNote").textContent = list.length ? fmtShort(list.reduce(function (s, x) { return s + Number(x.rec.amount || 0); }, 0)) : "нічого";
+    note.textContent = list.length ? fmtShort(list.reduce(function (s, x) { return s + Number(x.rec.amount || 0); }, 0)) : "нічого";
     if (!list.length) { wrap.innerHTML = '<div class="empty-note">До кінця місяця списань нема.</div>'; return; }
     wrap.innerHTML = list.map(function (x) {
       return '<div class="upcoming-row"><span class="up-day">' + esc(x.date.slice(8)) + '.' + esc(x.date.slice(5, 7)) + '</span>' +
@@ -792,6 +1110,7 @@
   function renderLedger() {
     document.getElementById("monthLabel").textContent = monthLabel(state.viewMonth);
     var body = document.getElementById("txBody");
+    var summary = document.getElementById("ledgerSummary");
     // Rows slide to their new places instead of jumping — but only when the
     // filter actually changed. Measuring every row on every render made a
     // month switch cost ~75 ms with a full journal.
@@ -810,14 +1129,22 @@
       note.hidden = false;
       note.textContent = "Фільтр: " + list.length + " операцій, витрат " + fmtShort(tot);
     } else note.hidden = true;
+    if (summary) {
+      var monthInc = sum(list.filter(isIncome));
+      var monthExp = sum(list.filter(isExpense));
+      summary.textContent = list.length
+        ? list.length + " операцій · " + fmtShort(monthInc) + " вхід · " + fmtShort(monthExp) + " вихід"
+        : "поки чисто, можна заносити перший рух";
+    }
 
-    list.forEach(function (t) {
+    list.forEach(function (t, i) {
       var tr = document.createElement("tr");
+      tr.style.setProperty("--row-i", String(Math.min(i, 10)));
       if (t.id === lastAddedId) { tr.classList.add("just-added"); lastAddedId = null; }
       if (t.recKey) tr.classList.add("is-recurring");
       var d = new Date(t.date + "T00:00:00");
       var color = colorFor(t.type, t.category);
-      var wal = "";
+      var wal = t.reserve ? "Резерв" : "";
       var sign = isIncome(t) ? "+" : "−";
       var cls = isIncome(t) ? "amt-pos" : "amt-neg";
       tr.innerHTML =
@@ -861,7 +1188,7 @@
     var t = state.transactions.find(function (x) { return x.id === id; });
     if (!t) return;
     var tr = document.querySelector('[data-edit-tx="' + CSS.escape(id) + '"]').closest("tr");
-    var cats = t.type === "income" ? INCOME_CATS : EXPENSE_CATS;
+    var cats = t.type === "income" ? INCOME_CATS : expenseCatNames();
     var editor = document.createElement("tr");
     editor.className = "edit-row";
     editor.innerHTML = '<td colspan="6"><form class="edit-form">' +
@@ -869,11 +1196,9 @@
       ('<select name="category" aria-label="Стаття">' + cats.map(function (c) {
         return '<option' + (c === t.category ? ' selected' : '') + '>' + esc(c) + '</option>';
       }).join("") + '</select>') +
-      '<select name="wallet" aria-label="Гаманець">' + WALLETS.map(function (w) {
-        return '<option' + (w === t.wallet ? ' selected' : '') + '>' + esc(w) + '</option>';
-      }).join("") + '</select>' +
       '<input type="text" name="amount" inputmode="decimal" value="' + esc(t.amount) + '" required aria-label="Сума" />' +
       '<input type="text" name="note" maxlength="120" value="' + esc(t.note || "") + '" aria-label="Нотатка" />' +
+      (t.type === "expense" ? '<label class="mini-check"><input type="checkbox" name="reserve"' + (t.reserve ? ' checked' : '') + ' />З резерву</label>' : '') +
       '<button class="btn-primary" type="submit">Зберегти</button>' +
       '<button class="btn" type="button" data-cancel>Скасувати</button></form></td>';
     tr.after(editor);
@@ -883,8 +1208,9 @@
       var fd = new FormData(ev.target);
       var p = parseAmount(fd.get("amount"));
       if (!p.ok) { showError("журнал", p.msg); return; }
-      var patch = { date: fd.get("date") || t.date, amount: p.value, note: String(fd.get("note") || "").trim(), wallet: fd.get("wallet") || t.wallet };
+      var patch = { date: fd.get("date") || t.date, amount: p.value, note: String(fd.get("note") || "").trim(), wallet: "Кеш" };
       patch.category = fd.get("category") || t.category;
+      if (t.type === "expense") patch.reserve = fd.get("reserve") === "on";
       editor.remove();
       store.update("transactions", id, patch).catch(function (e) { reportFailure("журнал", e); });
     });
@@ -896,17 +1222,18 @@
     document.getElementById("yearLabel").textContent = state.viewYear;
     var yearTx = state.transactions.filter(function (t) { return yearOf(t.date) === String(state.viewYear); });
     var inc = sum(yearTx.filter(isIncome)), exp = sum(yearTx.filter(isExpense));
-    var rate = inc > 0 ? Math.round(((inc - exp) / inc) * 100) : null;
+    var navarYear = navarHistory().filter(function (row) { return yearOf(row.month) === String(state.viewYear); })
+      .reduce(function (s, row) { return s + row.amount; }, 0);
     document.getElementById("yearTotals").innerHTML =
       '<div class="cell"><span class="cell-label">Заносять</span><span class="cell-value positive money">' + esc(fmt(inc)) + '</span></div>' +
       '<div class="cell"><span class="cell-label">Спускаємо</span><span class="cell-value negative money">' + esc(fmt(exp)) + '</span></div>' +
-      '<div class="cell"><span class="cell-label">Навар</span><span class="cell-value money">' + (rate === null ? "—" : rate + "%") + '</span></div>' +
+      '<div class="cell"><span class="cell-label">Навар</span><span class="cell-value money">' + esc(fmt(navarYear)) + '</span></div>' +
       '<div class="cell"><span class="cell-label">Чистими</span><span class="cell-value money">' + esc(fmt(inc - exp)) + '</span></div>';
 
     var months = [];
     for (var m = 1; m <= 12; m++) months.push(state.viewYear + "-" + pad(m));
     var head = '<tr><th>Стаття</th>' + months.map(function (mk) { return '<th class="num">' + esc(monthShort(mk)) + '</th>'; }).join("") + '<th class="num">Разом</th></tr>';
-    var rows = EXPENSE_CATS.map(function (cat) {
+    var rows = expenseCatNames().map(function (cat) {
       var cells = months.map(function (mk) {
         return monthTx(mk).filter(function (t) { return isExpense(t) && t.category === cat; }).reduce(function (s, t) { return s + t.amount; }, 0);
       });
@@ -1009,36 +1336,85 @@
 
   function renderRecords() {
     var box = document.getElementById("recordsBox");
-    var byMonth = {};
-    state.transactions.forEach(function (t) {
-      var mk = monthKey(t.date);
-      if (!byMonth[mk]) byMonth[mk] = { inc: 0, exp: 0 };
-      if (isIncome(t)) byMonth[mk].inc += t.amount;
-      if (isExpense(t)) byMonth[mk].exp += t.amount;
-    });
-    var best = null;
-    Object.keys(byMonth).forEach(function (mk) {
-      var m = byMonth[mk];
-      if (m.inc <= 0) return;
-      var r = Math.round(((m.inc - m.exp) / m.inc) * 100);
-      if (!best || r > best.rate) best = { mk: mk, rate: r };
-    });
-    var closed = state.goals.filter(function (g) { return g.closedAt; }).length;
+    var best = navarHistory().reduce(function (top, row) {
+      if (!top || row.amount > top.amount) return row;
+      return top;
+    }, null);
     var s = streak();
     box.innerHTML = '<div class="hof-title">Рекорди</div>' +
-      '<div class="record-row"><span>Найкращий місяць</span><span>' + (best ? esc(monthLabel(best.mk)) + " · " + best.rate + "%" : "—") + '</span></div>' +
+      '<div class="record-row"><span>Найкращий перенос</span><span>' + (best ? esc(monthLabel(best.month)) + " · " + esc(fmtShort(best.amount)) : "—") + '</span></div>' +
       '<div class="record-row"><span>Рекорд серії</span><span>' + s.record + ' дн.</span></div>' +
-      '<div class="record-row"><span>Закритих цілей</span><span>' + closed + '</span></div>';
-    if (best && (settings().bestRate == null || best.rate > settings().bestRate)) {
-      if (settings().bestRate != null) flashGold();
-      saveSettings({ bestRate: best.rate });
-    }
+      '<div class="record-row"><span>Місяців у наварі</span><span>' + navarHistory().length + '</span></div>';
   }
-  function flashGold() {
-    var el = document.getElementById("statSavings");
-    if (!el || state.settings.calmMode) return;
-    el.classList.add("gold-flash");
-    setTimeout(function () { el.classList.remove("gold-flash"); }, 1200);
+
+  function renderExpenseCategorySettings() {
+    var wrap = document.getElementById("expenseCategoryList");
+    if (!wrap) return;
+    var rows = expenseCats();
+    wrap.innerHTML = rows.map(function (row, index) {
+      return '<div class="expense-cat-row" data-cat-index="' + index + '">' +
+        '<span class="cat-dot expense-cat-dot" style="background:' + esc(row.color) + '"></span>' +
+        '<input type="text" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
+        '<input type="color" data-cat-color value="' + esc(row.color) + '" aria-label="Колір категорії" />' +
+        '<button class="btn" type="button" data-save-expense-cat="' + index + '">Оновити</button>' +
+        '<button class="icon-btn" type="button" data-del-expense-cat="' + esc(row.name) + '" aria-label="Видалити категорію">✕</button>' +
+        '</div>';
+    }).join("");
+    wrap.querySelectorAll("[data-save-expense-cat]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest(".expense-cat-row");
+        if (!row) return;
+        saveExpenseCategoryEdit(Number(btn.dataset.saveExpenseCat), row.querySelector("[data-cat-name]").value, row.querySelector("[data-cat-color]").value);
+      });
+    });
+    wrap.querySelectorAll("[data-del-expense-cat]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        dropExpenseCategory(btn.dataset.delExpenseCat);
+      });
+    });
+  }
+
+  function renderSettings() {
+    if (state.view !== "settings") return;
+    var s = settings();
+    var salaryNote = document.getElementById("salaryPlanNote");
+    if (salaryNote) {
+      if (s.salaryAmount > 0) {
+        var days = salaryDaysForMonth(monthKey(todayISO()));
+        var each = days.length ? round2(s.salaryAmount / days.length) : s.salaryAmount;
+        salaryNote.textContent = days.length
+          ? "Цього місяця " + days.length + " випл. · " + payoutLabel(monthKey(todayISO())) + " · орієнтир " + fmtShort(each) + " за раз"
+          : "ЗП задана, але дні надходження ще не вказані.";
+      } else salaryNote.textContent = "Місячна ЗП поки не задана.";
+    }
+
+    var weekPlanStatus = document.getElementById("weekPlanStatus");
+    if (weekPlanStatus) {
+      var a = allowance();
+      var planned = sumWeekDaily(s.weekDaily);
+      var gap = round2(s.weekBudget - (planned + s.weekReserve));
+      var parts = [
+        "дні " + fmtShort(planned),
+        "резерв " + fmtShort(s.weekReserve),
+        "тиждень " + fmtShort(s.weekBudget)
+      ];
+      if (gap) parts.push((gap > 0 ? "не розкладено " : "перебір ") + fmtShort(Math.abs(gap)));
+      parts.push("резерв лишився " + fmtShort(Math.max(0, a.reserveLeft)));
+      if (!s.allowanceEnabled) parts.unshift("прогноз вимкнено");
+      weekPlanStatus.textContent = parts.join(" · ");
+    }
+
+    var navarBox = document.getElementById("navarList");
+    if (navarBox) {
+      var rows = navarHistory().slice().sort(function (a, b) { return a.month < b.month ? 1 : -1; });
+      if (!rows.length) navarBox.innerHTML = '<div class="empty-note">Ще нема місячних переносів.</div>';
+      else navarBox.innerHTML = '<div class="hof-title">Історія</div>' + rows.map(function (row) {
+        return '<div class="record-row"><span>' + esc(monthLabel(row.month)) + '</span><span>' + esc(fmtShort(row.amount)) + '</span></div>';
+      }).join("");
+    }
+    var expenseNote = document.getElementById("expenseCategoryNote");
+    if (expenseNote) expenseNote.textContent = expenseCatNames().length + " категорій · кольори одразу йдуть у журнал, ліміти та аналітику";
+    renderExpenseCategorySettings();
   }
 
   function renderTicker() {
@@ -1046,7 +1422,7 @@
     var mtx = monthTx(state.viewMonth).filter(isExpense);
     var totals = {};
     mtx.forEach(function (t) { totals[t.category] = (totals[t.category] || 0) + t.amount; });
-    var parts = EXPENSE_CATS.map(function (c) {
+    var parts = expenseCatNames().map(function (c) {
       var prev = monthTx(addMonths(state.viewMonth, -1)).filter(function (t) { return isExpense(t) && t.category === c; })
         .reduce(function (s, t) { return s + t.amount; }, 0);
       var now = totals[c] || 0;
@@ -1059,9 +1435,9 @@
 
   function renderAll() {
     dropMonthCache();
-    var steps = [renderStats, renderAllowance, renderBudgets, renderDelta, renderGoals, renderDonut,
-      renderTrend, renderUpcoming, renderStreak, renderLedger, renderRecurring, renderAmortize,
-      renderDebts, renderRecords, renderTicker, renderYear, renderPresets, syncSearchCats];
+    var steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDelta, renderDonut,
+      renderTrend, renderStreak, renderLedger, renderRecurring, renderAmortize,
+      renderDebts, renderRecords, renderTicker, renderYear, renderPresets, renderSettings, syncSearchCats];
     steps.forEach(function (fn) {
       try { fn(); } catch (err) { console.error("[Копійка] помилка рендеру в " + fn.name + ":", err); }
     });
@@ -1078,7 +1454,7 @@
     var petals = Math.max(3, Math.min(13, Object.keys(cats).length + 3));
     var budgets = settings().budgets;
     var pressure = 0, counted = 0;
-    EXPENSE_CATS.forEach(function (c) {
+    expenseCatNames().forEach(function (c) {
       var lim = Number(budgets[c]) || 0;
       if (!lim) return;
       var spent = exp.filter(function (t) { return t.category === c; }).reduce(function (s, t) { return s + t.amount; }, 0);
@@ -1106,12 +1482,30 @@
   function applySettingsToUi() {
     var s = settings();
     document.documentElement.classList.toggle("calm", !!s.calmMode);
+    syncExpenseCategoryControls();
+    var ae = document.getElementById("allowanceEnabled");
+    if (ae) ae.checked = !!s.allowanceEnabled;
+    var sa = document.getElementById("salaryAmount");
+    if (sa && document.activeElement !== sa) sa.value = s.salaryAmount ? String(s.salaryAmount) : "";
     var sd = document.getElementById("salaryDays");
     if (sd && document.activeElement !== sd) sd.value = s.salaryDays.join(", ");
+    var wb = document.getElementById("weekBudget");
+    if (wb && document.activeElement !== wb) wb.value = s.weekBudget ? String(s.weekBudget) : "";
+    var wr = document.getElementById("weekReserve");
+    if (wr && document.activeElement !== wr) wr.value = s.weekReserve ? String(s.weekReserve) : "";
+    document.querySelectorAll("[data-weekday]").forEach(function (inp) {
+      var idx = Number(inp.dataset.weekday) || 0;
+      if (document.activeElement === inp) return;
+      inp.value = s.weekDaily[idx] ? String(s.weekDaily[idx]) : "";
+    });
     var cm = document.getElementById("calmMode");
     if (cm) cm.checked = !!s.calmMode;
     var ps = document.getElementById("pinSet");
     if (ps && document.activeElement !== ps) ps.value = s.pin ? "••••" : "";
+    var catColor = document.querySelector('#expenseCategoryForm input[name="color"]');
+    if (catColor && document.activeElement !== catColor) {
+      catColor.value = DEFAULT_EXPENSE_CATEGORY_ROWS[expenseCats().length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color;
+    }
   }
 
   /* ============================ presets & repeat ============================ */
@@ -1144,7 +1538,8 @@
       return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
     })[0];
     if (!last) { showError("журнал", "Ще нема що повторювати."); return; }
-    var copy = { type: last.type, category: last.category, amount: last.amount, wallet: last.wallet, date: todayISO(), note: last.note || "" };
+    var copy = { type: last.type, category: last.category, amount: last.amount, wallet: "Кеш", date: todayISO(), note: last.note || "" };
+    if (last.type === "expense") copy.reserve = !!last.reserve;
     
     commitTx(copy);
   }
@@ -1197,13 +1592,41 @@
           // Deterministic document id — opening the app twice, or on two
           // devices, writes the same id instead of a duplicate row.
           commitTx({
-            type: "expense", category: r.category || "Подпіски", amount: Number(r.amount) || 0,
+            type: "expense", category: r.category || defaultExpenseName(), amount: Number(r.amount) || 0,
             wallet: r.wallet || "Кеш", date: when, note: r.name, recKey: key, recId: r.id
           }, key, true);
         }
         mk = addMonths(mk, 1);
       }
     });
+  }
+
+  function syncNavarHistory() {
+    var currentMk = monthKey(todayISO());
+    var firstMk = null;
+    state.transactions.forEach(function (t) {
+      var mk = monthKey(t.date);
+      if (!firstMk || mk < firstMk) firstMk = mk;
+    });
+    navarHistory().forEach(function (row) {
+      if (!firstMk || row.month < firstMk) firstMk = row.month;
+    });
+    if (!firstMk || firstMk >= currentMk) return;
+    var current = navarHistory();
+    var seenMonths = {};
+    current.forEach(function (row) { seenMonths[row.month] = true; });
+    var additions = [];
+    for (var mk = firstMk; mk < currentMk; mk = addMonths(mk, 1)) {
+      if (seenMonths[mk]) continue;
+      additions.push({
+        id: "navar." + mk.replace("-", "_"),
+        month: mk,
+        amount: monthProjectedCarry(mk),
+        createdAt: addMonths(mk, 1) + "-01T00:00:00.000Z"
+      });
+    }
+    if (!additions.length) return;
+    saveSettings({ navarHistory: current.concat(additions) });
   }
 
   /* ============================ migration ============================ */
@@ -1213,18 +1636,19 @@
     var patch = {};
     // Old rows carried the wallet in `category` for income and had none at all
     // for expenses.
-    var needWallet = state.transactions.filter(function (t) { return !t.wallet; });
+    var needWallet = state.transactions.filter(function (t) { return !t.wallet || t.wallet !== "Кеш"; });
     if (needWallet.length) {
       needWallet.forEach(function (t) {
-        var up = {};
-        if (t.type === "income" && (t.category === "Карта" || t.category === "Кеш")) { up.wallet = "Кеш"; up.category = "ЗП"; }
-        else if (t.type === "income") { up.wallet = "Кеш"; if (INCOME_CATS.indexOf(t.category) < 0) up.category = "ЗП"; }
-        else { up.wallet = "Кеш"; }
+        var up = { wallet: "Кеш" };
+        if (t.type === "income" && (t.category === "Карта" || t.category === "Кеш")) up.category = "ЗП";
+        else if (t.type === "income" && INCOME_CATS.indexOf(t.category) < 0) up.category = "ЗП";
         store.update("transactions", t.id, up).catch(function () {});
       });
     }
     if (!s.migratedV3) patch.migratedV3 = true;
+    if (!s.migratedV4) patch.migratedV4 = true;
     if (Object.keys(patch).length) saveSettings(patch);
+    syncNavarHistory();
   }
 
   // One-time lift of a localStorage-era journal into db, guarded against
@@ -1259,7 +1683,10 @@
     });
     (raw.goals || []).forEach(function (g) { var o = Object.assign({}, g); delete o.id; jobs.push(store.add("goals", o)); });
     return Promise.all(jobs).then(function () {
-      saveSettings({ migratedFromLocal: true, budgets: Object.assign({}, (raw.settings && raw.settings.budgets) || {}, settings().budgets) });
+      saveSettings(Object.assign({}, raw.settings || {}, settings(), {
+        migratedFromLocal: true,
+        budgets: Object.assign({}, (raw.settings && raw.settings.budgets) || {}, settings().budgets)
+      }));
       if (jobs.length) showError("міграція", "Перенесено " + jobs.length + " записів у спільну базу.");
     }).catch(function (e) { console.error("[Копійка] міграція:", e); });
   }
@@ -1267,7 +1694,7 @@
   /* ============================ backup / export ============================ */
 
   function snapshotPayload() {
-    var out = { app: "kopiyka", version: 3, exportedAt: new Date().toISOString(), settings: settings() };
+    var out = { app: "kopiyka", version: 4, exportedAt: new Date().toISOString(), settings: settings() };
     COLLECTIONS.forEach(function (c) { out[c] = state[c]; });
     return out;
   }
@@ -1363,7 +1790,7 @@
   function aiContext() {
     return {
       today: todayISO(),
-      expenseCategories: EXPENSE_CATS,
+      expenseCategories: expenseCatNames(),
       incomeCategories: INCOME_CATS,
       wallets: WALLETS
     };
@@ -1379,7 +1806,7 @@
       "Гаманці: " + ctx.wallets.join(", ") + ".\n" +
       "Поверни ТІЛЬКИ JSON-масив об'єктів виду " +
       '{"type":"expense"|"income","category":"...","amount":123.45,"wallet":"Кеш","date":"YYYY-MM-DD","note":"..."}.\n' +
-      "Категорію обирай лише зі списків вище. Якщо гаманець не вказано — \"Карта\". " +
+      "Категорію обирай лише зі списків вище. Якщо гаманець не вказано — \"Кеш\". " +
       "Відносні дати (вчора, позавчора) переводь у конкретну дату. Якщо дата не вказана — сьогодні.\n\n" +
       "Текст: " + text;
     aiCtl = new AbortController();
@@ -1402,7 +1829,7 @@
     var amt = softAmount(r.amount);
     if (amt == null) return null;
     var type = r.type === "income" ? "income" : "expense";
-    var cats = type === "income" ? INCOME_CATS : EXPENSE_CATS;
+    var cats = type === "income" ? INCOME_CATS : expenseCatNames();
     var cat = cats.indexOf(r.category) >= 0 ? r.category : cats[0];
     var wallet = "Кеш";
     var date = /^\d{4}-\d{2}-\d{2}$/.test(String(r.date)) ? r.date : todayISO();
@@ -1413,7 +1840,7 @@
     var box = document.getElementById("aiDraft");
     if (!aiDraft.length) { box.innerHTML = ""; return; }
     box.innerHTML = aiDraft.map(function (d, i) {
-      var cats = d.type === "income" ? INCOME_CATS : EXPENSE_CATS;
+      var cats = d.type === "income" ? INCOME_CATS : expenseCatNames();
       return '<div class="draft-card" data-i="' + i + '">' +
         '<select data-f="type"><option value="expense"' + (d.type === "expense" ? " selected" : "") + '>Витрата</option>' +
         '<option value="income"' + (d.type === "income" ? " selected" : "") + '>Дохід</option></select>' +
@@ -1465,8 +1892,9 @@
         if (!f || typeof f !== "object") { aiStatus("Не зрозумів питання."); return; }
         var from = /^\d{4}-\d{2}-\d{2}$/.test(String(f.from)) ? f.from : isoAdd(todayISO(), -365);
         var to = /^\d{4}-\d{2}-\d{2}$/.test(String(f.to)) ? f.to : todayISO();
+        var allowedExpenseCats = expenseCatNames();
         var cats = Array.isArray(f.categories) ? f.categories.filter(function (c) {
-          return EXPENSE_CATS.indexOf(c) >= 0 || INCOME_CATS.indexOf(c) >= 0;
+          return allowedExpenseCats.indexOf(c) >= 0 || INCOME_CATS.indexOf(c) >= 0;
         }) : [];
         var type = (f.type === "expense" || f.type === "income") ? f.type : null;
         state.filter = { allMonths: true, cats: cats, type: type, from: from, to: to, text: "" };
@@ -1502,10 +1930,13 @@
 
   function syncSearchCats() {
     var sel = document.getElementById("searchCat");
-    if (sel.options.length > 1) return;
-    EXPENSE_CATS.concat(INCOME_CATS).forEach(function (c) {
+    if (!sel) return;
+    var current = sel.value;
+    sel.innerHTML = '<option value="">Усі статті</option>';
+    expenseCatNames().concat(INCOME_CATS).forEach(function (c) {
       var o = document.createElement("option"); o.value = c; o.textContent = c; sel.appendChild(o);
     });
+    if (current && Array.prototype.some.call(sel.options, function (o) { return o.value === current; })) sel.value = current;
   }
   function readSearch() {
     var text = document.getElementById("searchText").value.trim();
@@ -1534,15 +1965,155 @@
   function fillSelect(sel, items, selected) {
     sel.innerHTML = items.map(function (c) { return '<option' + (c === selected ? " selected" : "") + '>' + esc(c) + '</option>'; }).join("");
   }
+  function syncExpenseCategoryControls() {
+    var expenseNames = expenseCatNames();
+    var tx = document.getElementById("txCategory");
+    var form = document.getElementById("txForm");
+    if (tx && form) {
+      var txItems = form.dataset.type === "income" ? INCOME_CATS : expenseNames;
+      var txSelected = txItems.indexOf(tx.value) >= 0 ? tx.value : txItems[0];
+      fillSelect(tx, txItems, txSelected);
+    }
+    var rec = document.getElementById("recCategory");
+    if (rec) {
+      var recSelected = expenseNames.indexOf(rec.value) >= 0 ? rec.value : expenseNames[0];
+      fillSelect(rec, expenseNames, recSelected);
+    }
+    syncSearchCats();
+  }
+
+  function collectExpenseCategoryUsage(name) {
+    var txCount = state.transactions.filter(function (t) { return isExpense(t) && t.category === name; }).length;
+    var recCount = state.recurring.filter(function (r) { return r.category === name; }).length;
+    var budgetUsed = Object.prototype.hasOwnProperty.call(settings().budgets || {}, name);
+    return { txCount: txCount, recCount: recCount, budgetUsed: budgetUsed };
+  }
+
+  function renameExpenseCategoryRefs(oldName, nextName) {
+    if (oldName === nextName) return;
+    state.transactions.forEach(function (t) {
+      if (isExpense(t) && t.category === oldName) t.category = nextName;
+    });
+    state.recurring.forEach(function (r) {
+      if (r.category === oldName) r.category = nextName;
+    });
+    if (state.filter && Array.isArray(state.filter.cats)) {
+      state.filter.cats = state.filter.cats.map(function (cat) { return cat === oldName ? nextName : cat; });
+    }
+    aiDraft.forEach(function (row) {
+      if (row.type === "expense" && row.category === oldName) row.category = nextName;
+    });
+    ["txCategory", "recCategory", "searchCat"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.value === oldName) el.value = nextName;
+    });
+  }
+
+  function persistExpenseCategoryRename(oldName, nextName) {
+    var jobs = [];
+    state.transactions.forEach(function (t) {
+      if (isExpense(t) && t.category === oldName) jobs.push(store.update("transactions", t.id, { category: nextName }));
+    });
+    state.recurring.forEach(function (r) {
+      if (r.category === oldName) jobs.push(store.update("recurring", r.id, { category: nextName }));
+    });
+    Promise.all(jobs).catch(function (e) { reportFailure("категорії", e); });
+  }
+
+  function saveExpenseCategoryEdit(index, rawName, rawColor) {
+    var rows = expenseCats().slice();
+    var current = rows[index];
+    if (!current) return;
+    var nextName = normalizeExpenseCategoryName(rawName);
+    if (!nextName) { showError("категорії", "Введи назву категорії."); return; }
+    var duplicate = rows.some(function (row, rowIndex) {
+      return rowIndex !== index && row.name.toLocaleLowerCase("uk-UA") === nextName.toLocaleLowerCase("uk-UA");
+    });
+    if (duplicate) { showError("категорії", "Така категорія вже є."); return; }
+    var nextColor = normalizeExpenseCategoryColor(rawColor, current.color);
+    rows[index] = { name: nextName, color: nextColor };
+    var budgets = Object.assign({}, settings().budgets);
+    if (nextName !== current.name && Object.prototype.hasOwnProperty.call(budgets, current.name)) {
+      budgets[nextName] = budgets[current.name];
+      delete budgets[current.name];
+    }
+    renameExpenseCategoryRefs(current.name, nextName);
+    saveSettings({ expenseCategories: rows, budgets: budgets });
+    if (nextName !== current.name) persistExpenseCategoryRename(current.name, nextName);
+    renderAll();
+  }
+
+  function dropExpenseCategory(name) {
+    var rows = expenseCats().slice();
+    if (rows.length <= 1) { showError("категорії", "Залиш хоча б одну категорію витрат."); return; }
+    var usage = collectExpenseCategoryUsage(name);
+    if (usage.txCount || usage.recCount || usage.budgetUsed) {
+      showError("категорії", "Спочатку перенеси записи, регулярні витрати та ліміти з цієї категорії.");
+      return;
+    }
+    saveSettings({
+      expenseCategories: rows.filter(function (row) { return row.name !== name; })
+    });
+    renderAll();
+  }
+
+  function addExpenseCategory(rawName, rawColor) {
+    var name = normalizeExpenseCategoryName(rawName);
+    if (!name) { showError("категорії", "Введи назву для нової категорії."); return false; }
+    var rows = expenseCats().slice();
+    var duplicate = rows.some(function (row) { return row.name.toLocaleLowerCase("uk-UA") === name.toLocaleLowerCase("uk-UA"); });
+    if (duplicate) { showError("категорії", "Така категорія вже є."); return false; }
+    rows.push({ name: name, color: normalizeExpenseCategoryColor(rawColor, DEFAULT_EXPENSE_CATEGORY_ROWS[rows.length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color) });
+    saveSettings({ expenseCategories: rows });
+    renderAll();
+    return true;
+  }
+
+  var expenseCategorySyncStamp = "";
+  function ensureExpenseCategoriesFromData() {
+    var rows = expenseCats().slice();
+    var known = Object.create(null);
+    rows.forEach(function (row) { known[row.name.toLocaleLowerCase("uk-UA")] = true; });
+    var missing = [];
+    function push(raw) {
+      var name = normalizeExpenseCategoryName(raw);
+      if (!name) return;
+      var key = name.toLocaleLowerCase("uk-UA");
+      if (known[key]) return;
+      known[key] = true;
+      missing.push({
+        name: name,
+        color: DEFAULT_EXPENSE_CATEGORY_ROWS[(rows.length + missing.length) % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color
+      });
+    }
+    Object.keys(settings().budgets || {}).forEach(push);
+    state.transactions.forEach(function (t) { if (isExpense(t)) push(t.category); });
+    state.recurring.forEach(function (r) { push(r.category); });
+    var stamp = Object.keys(known).sort().join("|");
+    if (!missing.length) { expenseCategorySyncStamp = stamp; return; }
+    if (expenseCategorySyncStamp === stamp) return;
+    expenseCategorySyncStamp = stamp;
+    saveSettings({ expenseCategories: rows.concat(missing) });
+  }
 
   function wire() {
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
     dateInput.value = todayISO();
     var currentType = "expense";
-    fillSelect(document.getElementById("txCategory"), EXPENSE_CATS);
-    
-    
+    form.dataset.type = currentType;
+    var reserveToggle = document.getElementById("reserveToggle");
+    var reserveInput = reserveToggle && reserveToggle.querySelector('input[name="reserve"]');
+    fillSelect(document.getElementById("txCategory"), expenseCatNames());
+    function syncTxMode() {
+      if (!reserveToggle || !reserveInput) return;
+      form.dataset.type = currentType;
+      var showReserve = currentType === "expense";
+      reserveToggle.hidden = !showReserve;
+      reserveInput.disabled = !showReserve;
+      if (!showReserve) reserveInput.checked = false;
+    }
+    syncTxMode();
 
     form.querySelectorAll(".type-toggle button").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -1550,7 +2121,8 @@
         form.querySelectorAll(".type-toggle button").forEach(function (b) { b.classList.toggle("active", b === btn); });
         var catSel = document.getElementById("txCategory");
         catSel.hidden = false; catSel.required = true;
-          fillSelect(catSel, currentType === "income" ? INCOME_CATS : EXPENSE_CATS);
+        fillSelect(catSel, currentType === "income" ? INCOME_CATS : expenseCatNames());
+        syncTxMode();
       });
     });
 
@@ -1565,9 +2137,11 @@
         date: fd.get("date") || todayISO(), note: String(fd.get("note") || "").trim()
       };
       payload.category = fd.get("category");
+      if (currentType === "expense") payload.reserve = fd.get("reserve") === "on";
       commitTx(payload);
       form.querySelector('input[name="amount"]').value = "";
       form.querySelector('input[name="note"]').value = "";
+      if (reserveInput) reserveInput.checked = false;
       form.querySelector('input[name="amount"]').focus();
     });
 
@@ -1586,7 +2160,7 @@
           t.classList.toggle("active", on); t.setAttribute("aria-selected", on ? "true" : "false");
         });
         function swap() {
-          ["main", "year", "plan"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
+          ["main", "year", "plan", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
           renderAll();
         }
         // A second transition started while one is still running rejects with
@@ -1606,24 +2180,8 @@
       });
     });
 
-    // goals
-    document.getElementById("addGoalBtn").addEventListener("click", function () {
-      var gf = document.getElementById("goalForm"); gf.hidden = !gf.hidden;
-    });
-    document.getElementById("goalForm").addEventListener("submit", function (ev) {
-      ev.preventDefault();
-      var fd = new FormData(ev.target);
-      var p = parseAmount(fd.get("target"));
-      var name = String(fd.get("name") || "").trim();
-      if (!name) { showError("схрон", "Введи назву."); return; }
-      if (!p.ok) { showError("схрон", p.msg); return; }
-      store.add("goals", { name: name, target: p.value, current: 0, deadline: fd.get("deadline") || null })
-        .catch(function (e) { reportFailure("схрон", e); });
-      ev.target.reset(); ev.target.hidden = true;
-    });
-
     // recurring
-    fillSelect(document.getElementById("recCategory"), EXPENSE_CATS);
+    fillSelect(document.getElementById("recCategory"), expenseCatNames());
     fillSelect(document.getElementById("recWallet"), WALLETS);
     document.getElementById("addRecBtn").addEventListener("click", function () {
       var f = document.getElementById("recForm"); f.hidden = !f.hidden;
@@ -1679,12 +2237,64 @@
     });
 
     // settings
+    document.getElementById("salaryAmount").addEventListener("change", function () {
+      var raw = String(this.value).trim();
+      if (!raw) { saveSettings({ salaryAmount: 0 }); renderAll(); return; }
+      var p = parseAmount(raw);
+      if (!p.ok) { showError("налаштування", p.msg); this.focus(); return; }
+      saveSettings({ salaryAmount: p.value });
+      renderAll();
+    });
     document.getElementById("salaryDays").addEventListener("change", function () {
       var days = String(this.value).split(/[^\d]+/).map(Number).filter(function (d) { return d >= 1 && d <= 31; });
       if (!days.length) { showError("налаштування", "Вкажи хоч один день від 1 до 31."); this.value = settings().salaryDays.join(", "); return; }
       saveSettings({ salaryDays: days.slice(0, 6) });
       renderAll();
     });
+    document.getElementById("allowanceEnabled").addEventListener("change", function () {
+      saveSettings({ allowanceEnabled: this.checked });
+      renderAll();
+    });
+    document.getElementById("weekBudget").addEventListener("change", function () {
+      var raw = String(this.value).trim();
+      if (!raw) { saveSettings({ weekBudget: 0 }); renderAll(); return; }
+      var p = parseAmount(raw);
+      if (!p.ok) { showError("налаштування", p.msg); this.focus(); return; }
+      saveSettings({ weekBudget: p.value });
+      renderAll();
+    });
+    document.getElementById("weekReserve").addEventListener("change", function () {
+      var raw = String(this.value).trim();
+      if (!raw) { saveSettings({ weekReserve: 0 }); renderAll(); return; }
+      var p = parseAmount(raw);
+      if (!p.ok) { showError("налаштування", p.msg); this.focus(); return; }
+      saveSettings({ weekReserve: p.value });
+      renderAll();
+    });
+    document.querySelectorAll("[data-weekday]").forEach(function (inp) {
+      inp.addEventListener("change", function () {
+        var raw = String(inp.value).trim();
+        var next = normalizeWeekDaily(settings().weekDaily);
+        if (!raw) next[Number(inp.dataset.weekday) || 0] = 0;
+        else {
+          var p = parseAmount(raw);
+          if (!p.ok) { showError("налаштування", p.msg); inp.focus(); return; }
+          next[Number(inp.dataset.weekday) || 0] = p.value;
+        }
+        saveSettings({ weekDaily: next });
+        renderAll();
+      });
+    });
+    var expenseCategoryForm = document.getElementById("expenseCategoryForm");
+    if (expenseCategoryForm) {
+      expenseCategoryForm.addEventListener("submit", function (ev) {
+        ev.preventDefault();
+        var fd = new FormData(ev.target);
+        if (addExpenseCategory(fd.get("name"), fd.get("color"))) ev.target.reset();
+        var color = expenseCategoryForm.querySelector('input[name="color"]');
+        if (color) color.value = DEFAULT_EXPENSE_CATEGORY_ROWS[expenseCats().length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color;
+      });
+    }
     document.getElementById("calmMode").addEventListener("change", function () {
       saveSettings({ calmMode: this.checked });
       if (window.__guilloche) window.__guilloche.setCalm(this.checked);
@@ -1781,6 +2391,8 @@
         state[c] = list;
         seen[c] = true;
         if (!state.ready) return;
+        if (c === "transactions" || c === "recurring") ensureExpenseCategoriesFromData();
+        if (c === "transactions") syncNavarHistory();
         renderAll();
         if (c === "recurring" || c === "transactions") postDueRecurring();
       }, function (down) { setSync(down ? "warn" : (store.offline ? "local" : "online")); });
@@ -1788,14 +2400,19 @@
     store.subscribeSettings(function (s) {
       seen.settings = true;
       state.settings = Object.assign(defaultSettings(), s);
+      ensureExpenseCategoriesFromData();
       applySettingsToUi();
       lockIfNeeded();
-      if (state.ready) renderAll();
+      if (state.ready) {
+        syncNavarHistory();
+        renderAll();
+      }
     });
     // First paint once the initial snapshots have had a moment to land.
     setTimeout(function () {
       state.ready = true;
       runMigrations();
+      ensureExpenseCategoriesFromData();
       postDueRecurring();
       renderAll();
       maybeNudge();

@@ -248,12 +248,18 @@ h1, h2, .cell-label, .panel-note, .btn, .btn-primary, .viewtab, th {
 ::view-transition-old(kopiyka-balance),
 ::view-transition-new(kopiyka-balance) { animation-duration: .35s; }
 .cell-in, .cell-out, .cell-rate { grid-column: span 4; }
+.bento[data-allowance="off"] .cell-balance { grid-column: span 4; }
+.bento[data-allowance="off"] .cell-in,
+.bento[data-allowance="off"] .cell-out { grid-column: span 2; }
 
 @media (min-width: 720px) {
   .cell-hero { grid-column: span 2; grid-row: span 2; }
   .cell-balance { grid-column: span 2; }
   .cell-in, .cell-out { grid-column: span 1; }
   .cell-rate { grid-column: span 2; }
+  .bento[data-allowance="off"] .cell-balance { grid-column: span 2; }
+  .bento[data-allowance="off"] .cell-in,
+  .bento[data-allowance="off"] .cell-out { grid-column: span 1; }
 }
 
 .cell-label { font-size: 10px; color: var(--ink-muted); }
@@ -278,15 +284,79 @@ h1, h2, .cell-label, .panel-note, .btn, .btn-primary, .viewtab, th {
 .panel {
   position: relative; background: var(--panel); border: 1px solid var(--hair);
   border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); min-width: 0;
+  overflow: hidden;
 }
-.panel-ledger { margin-top: 12px; }
+.panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gold) 45%, transparent), transparent);
+  opacity: .6;
+}
+.panel-ledger {
+  margin-top: 12px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 46%),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 72%, var(--paper)), var(--panel));
+}
+.panel-ledger-priority {
+  margin-top: 0;
+  margin-bottom: 18px;
+  border-color: color-mix(in srgb, var(--gold) 40%, var(--hair));
+  box-shadow: 0 24px 48px rgba(29,42,34,.12), var(--shadow);
+}
+.panel-ledger-priority::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--gold-hi), transparent);
+  opacity: .9;
+}
 .panel-head, .ledger-head {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   margin-bottom: 12px; flex-wrap: wrap;
 }
 .panel-head h2, .ledger-head h2 { font-size: 15px; margin: 0; }
+.ledger-title { display: flex; flex-direction: column; gap: 5px; }
+.ledger-title h2 { font-size: 17px; }
 .panel-note { font-size: 10px; color: var(--ink-muted); display: flex; gap: 10px; }
 .empty-note { color: var(--ink-muted); font-family: "Bad Script", cursive; text-transform: none; letter-spacing: 0; font-size: 15px; padding: 8px 0; }
+.panel-week-hero {
+  background:
+    radial-gradient(120% 120% at 0% 0%, color-mix(in srgb, var(--gold) 18%, transparent), transparent 56%),
+    radial-gradient(130% 100% at 100% 0%, color-mix(in srgb, var(--positive) 10%, transparent), transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 74%, var(--paper)), var(--panel));
+  border-color: color-mix(in srgb, var(--gold) 34%, var(--hair));
+  box-shadow: 0 22px 40px rgba(29,42,34,.12), var(--shadow);
+}
+.panel-budget-sculpt,
+.panel-orbit,
+.panel-wave,
+.panel-delta-slab {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 90%, #fff), var(--panel)),
+    var(--panel);
+}
+.panel-budget-sculpt::after,
+.panel-orbit::after,
+.panel-wave::after,
+.panel-delta-slab::after {
+  content: "";
+  position: absolute;
+  inset: auto -30% -40% auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  opacity: .08;
+  pointer-events: none;
+}
+.panel-budget-sculpt::after { background: radial-gradient(circle, var(--gold), transparent 68%); }
+.panel-orbit::after { background: radial-gradient(circle, var(--cat-1), transparent 68%); }
+.panel-wave::after { background: radial-gradient(circle, var(--positive), transparent 68%); }
+.panel-delta-slab::after { background: radial-gradient(circle, var(--negative), transparent 68%); }
 
 /* ------------------------- контролі ------------------------- */
 
@@ -323,20 +393,46 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 .type-toggle button.active[data-type="income"] { background: var(--positive); color: #fff; }
 .type-toggle button.active[data-type="transfer"] { background: var(--ink-muted); color: var(--panel); }
 
-.quick-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.quick-add {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px;
+  padding: 12px; border: 1px solid color-mix(in srgb, var(--gold) 26%, var(--hair));
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--panel-2) 90%, #fff) 0%, var(--panel-2) 62%, color-mix(in srgb, var(--gold) 8%, var(--panel-2)) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
+}
 .quick-add input[name="amount"] { font-family: "Rubik Mono One", Oswald, monospace; letter-spacing: .02em; width: 130px; }
 .quick-add input[name="note"] { flex: 1 1 180px; }
 .stack-form { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.mini-check {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--hair-strong); border-radius: 8px;
+  background: var(--panel-2); padding: 8px 12px; font-size: 11px;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ink-muted);
+}
+.mini-check input { margin: 0; }
 
-.presets { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 10px; }
+.presets { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
 .preset { font-size: 11px; padding: 6px 10px; display: inline-flex; align-items: center; gap: 6px; }
 .preset b { font-family: "Rubik Mono One", Oswald, monospace; font-size: 11px; }
 
-.streak-strip { display: flex; gap: 12px; align-items: center; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 10px; }
+.streak-strip {
+  display: flex; gap: 12px; align-items: center; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-muted);
+  margin-bottom: 12px; padding: 10px 12px;
+  background: color-mix(in srgb, var(--panel-2) 90%, transparent);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
 .streak-cur { color: var(--gold); }
 .streak-todo { color: var(--negative); }
 
-.search-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.search-bar {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--paper) 28%, var(--panel-2));
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+}
 .search-bar input[type="search"] { flex: 1 1 200px; }
 .search-bar input[type="text"] { width: 92px; }
 .filter-note { font-size: 11px; color: var(--gold); margin-bottom: 8px; }
@@ -346,15 +442,51 @@ input:focus, select:focus, textarea:focus { border-color: var(--gold); }
 .month-nav { display: flex; align-items: center; gap: 8px; }
 .month-label { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); min-width: 132px; text-align: center; }
 
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; }
+.table-wrap {
+  overflow-x: auto;
+  padding: 4px;
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-2) 92%, #fff), color-mix(in srgb, var(--paper) 16%, var(--panel-2)));
+  border: 1px solid color-mix(in srgb, var(--gold) 20%, var(--hair));
+}
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 8px;
+}
 th {
   text-align: left; font-size: 9px; letter-spacing: .16em; color: var(--ink-muted);
-  border-bottom: 1px solid var(--hair-strong); padding: 8px 8px;
+  border-bottom: 1px solid var(--hair-strong); padding: 8px 10px 12px;
 }
-td { padding: 9px 8px; border-bottom: 1px solid var(--hair); font-size: 13px; vertical-align: middle; }
+td {
+  padding: 12px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--gold) 12%, var(--hair));
+  border-bottom: 1px solid color-mix(in srgb, var(--gold) 12%, var(--hair));
+  font-size: 13px; vertical-align: middle;
+  background: color-mix(in srgb, var(--panel) 92%, #fff);
+  transition: transform .28s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease, background .28s ease, border-color .28s ease;
+}
+tbody tr:hover td {
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--panel-2) 94%, #fff);
+  border-color: color-mix(in srgb, var(--gold) 26%, var(--hair));
+  box-shadow: 0 10px 22px rgba(29,42,34,.08);
+}
+tbody tr {
+  animation: ledger-row-in .5s cubic-bezier(.2,.8,.2,1) both;
+  animation-delay: calc(var(--row-i, 0) * 24ms);
+}
+tbody tr td:first-child {
+  border-left: 1px solid color-mix(in srgb, var(--gold) 12%, var(--hair));
+  border-radius: 12px 0 0 12px;
+}
+tbody tr td:last-child {
+  border-right: 1px solid color-mix(in srgb, var(--gold) 12%, var(--hair));
+  border-radius: 0 12px 12px 0;
+}
 td.num, th.num { text-align: right; white-space: nowrap; }
-.row-cat { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.row-cat { display: flex; align-items: center; gap: 8px; white-space: nowrap; font-weight: 600; }
 .row-note { color: var(--ink-muted); max-width: 260px; overflow-wrap: anywhere; }
 .row-wallet { color: var(--ink-muted); white-space: nowrap; font-size: 12px; }
 .amt-pos { color: var(--positive); }
@@ -364,17 +496,30 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .cat-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; flex: none; }
 .actions { white-space: nowrap; }
 
-.just-added { animation: fresh-print .9s ease both; }
+.just-added { animation: fresh-print 1.35s cubic-bezier(.18,.88,.2,1.18) both; }
 @keyframes fresh-print {
-  0%   { background: color-mix(in srgb, var(--gold) 28%, transparent); filter: blur(1.4px); opacity: .3; }
-  60%  { filter: blur(0); opacity: 1; }
-  100% { background: transparent; }
+  0%   { transform: translateY(18px) scale(.94); background: color-mix(in srgb, var(--gold) 34%, transparent); filter: blur(3px); opacity: .18; }
+  48%  { transform: translateY(-3px) scale(1.015); filter: blur(0); opacity: 1; }
+  72%  { transform: translateY(0) scale(.998); }
+  100% { transform: none; background: transparent; }
 }
-.burning { animation: burn .26s ease forwards; }
-@keyframes burn { to { opacity: 0; transform: translateX(14px) scale(.97); } }
+.burning { animation: burn .42s cubic-bezier(.24,.82,.24,1) forwards; }
+@keyframes burn {
+  0% { opacity: 1; transform: none; filter: blur(0); }
+  100% { opacity: 0; transform: translateX(18px) scale(.94); filter: blur(1.2px); }
+}
+@keyframes ledger-row-in {
+  0% { opacity: 0; transform: translateY(10px) scale(.985); }
+  100% { opacity: 1; transform: none; }
+}
 
 .edit-row td { background: var(--panel-2); }
-.edit-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.edit-form {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 86%, var(--paper));
+}
 
 /* ------------------------- ліміти / дельта ------------------------- */
 
@@ -397,6 +542,98 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .delta-pct.worse { color: var(--negative); }
 .delta-pct.better { color: var(--positive); }
 .delta-pct.neutral { color: var(--ink-muted); }
+
+.week-board {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.panel-week-hero .week-board {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.week-day {
+  position: relative;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--foil) 10%, transparent), transparent 42%),
+    var(--panel-2);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+.week-day::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border: 1px solid color-mix(in srgb, var(--gold) 24%, transparent);
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: .45;
+}
+.week-day.is-today {
+  border-color: color-mix(in srgb, var(--gold) 58%, var(--hair));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 22%, transparent), var(--shadow);
+}
+.week-day.is-out {
+  opacity: .65;
+}
+.week-day-top {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.week-day-name, .week-day-date {
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+.week-day-money {
+  font-family: "Rubik Mono One", Oswald, monospace;
+  font-size: 18px;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.week-day-lines {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.week-day-lines b {
+  font-weight: 700;
+}
+.week-day-lines .ok { color: var(--positive); }
+.week-day-lines .bad { color: var(--negative); }
+.week-day-status {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 700;
+  border: 1px solid var(--hair-strong);
+}
+.week-day-status.ok {
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--positive) 88%, #fff), var(--positive));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 6px 16px rgba(31,107,65,.18);
+}
+.week-day-status.bad {
+  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--negative) 78%, #fff), var(--negative));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 6px 16px rgba(163,43,37,.18);
+}
+.week-day-status.pending {
+  color: var(--gold-lo);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 36%, #fff), color-mix(in srgb, var(--panel) 88%, var(--gold)));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
+}
 
 /* ------------------------- діаграми ------------------------- */
 
@@ -481,6 +718,44 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--hair); font-size: 12px; }
 .setting-row input[type="text"] { width: 140px; }
 .setting-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.setting-note { margin-top: 12px; font-size: 11px; color: var(--ink-muted); line-height: 1.5; }
+.expense-cat-form {
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hair);
+}
+.expense-cat-form input[name="name"] { flex: 1 1 180px; }
+.expense-cat-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hair);
+}
+.expense-cat-row:last-child { border-bottom: 0; }
+.expense-cat-row input[type="text"] { width: 100%; }
+.expense-cat-row input[type="color"] {
+  width: 48px;
+  min-width: 48px;
+  padding: 4px;
+  border-radius: 10px;
+}
+.expense-cat-dot {
+  width: 14px;
+  height: 14px;
+}
+.week-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+.week-grid label {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 10px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel-2);
+  font-size: 12px;
+}
+.week-grid input { width: 96px; text-align: right; }
 
 /* ------------------------- рік ------------------------- */
 
@@ -613,6 +888,21 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .row-note { max-width: 130px; }
   .month-label { min-width: 108px; font-size: 11px; }
   .setting-row { flex-wrap: wrap; }
+  .mini-check { width: 100%; justify-content: center; }
+  .week-board { grid-template-columns: 1fr; }
+  .panel-week-hero .week-board { grid-template-columns: 1fr; }
+  .week-grid { grid-template-columns: 1fr; }
+  .week-grid input { width: 110px; }
+  .expense-cat-row {
+    grid-template-columns: auto 1fr auto;
+  }
+  .expense-cat-row input[type="color"] {
+    justify-self: end;
+  }
+  .expense-cat-row .btn,
+  .expense-cat-row .icon-btn {
+    grid-column: span 3;
+  }
   .rec-row { grid-template-columns: auto 1fr auto auto; row-gap: 4px; }
   .rec-row .rec-wallet, .rec-row .rec-day { grid-column: span 2; }
   .debt-row { grid-template-columns: auto 1fr auto auto; row-gap: 4px; }

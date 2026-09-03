@@ -25,6 +25,7 @@
         <button class="viewtab active" data-view="main" role="tab" aria-selected="true">Місяць</button>
         <button class="viewtab" data-view="year" role="tab" aria-selected="false">Рік</button>
         <button class="viewtab" data-view="plan" role="tab" aria-selected="false">Плани</button>
+        <button class="viewtab" data-view="settings" role="tab" aria-selected="false">Налаштування</button>
       </nav>
       <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
     </div>
@@ -38,85 +39,12 @@
 
   <section class="view" id="view-main">
 
-    <div class="bento">
-      <div class="cell cell-hero" id="allowanceCard">
-        <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
-        <span class="denomination money" id="allowanceValue">—</span>
-        <div class="cell-meta">
-          <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
-          <span id="allowanceHint"></span>
-        </div>
-        <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
-      </div>
-
-      <div class="cell cell-balance">
-        <span class="cell-label">Общак <span class="cell-sub2">заг. баланс</span></span>
-        <span class="cell-value money" id="statBalance">0,00 ₴</span>
-        <div class="cell-sub" id="statBalanceSub"></div>
-        <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
-      </div>
-
-      <div class="cell cell-in">
-        <span class="cell-label">Заносять <span class="cell-sub2">дохід/місяць</span></span>
-        <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
-        <div class="cell-sub" id="statIncomeSub"></div>
-      </div>
-
-      <div class="cell cell-out">
-        <span class="cell-label">Спускаємо <span class="cell-sub2">витрати/місяць</span></span>
-        <span class="cell-value negative money" id="statExpense">0,00 ₴</span>
-        <div class="cell-sub" id="statExpenseSub"></div>
-      </div>
-
-      <div class="cell cell-rate">
-        <span class="cell-label">Навар <span class="cell-sub2">% заощаджень</span></span>
-        <span class="cell-value money" id="statSavings">0%</span>
-        <div class="cell-sub" id="statSavingsSub"></div>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <section class="panel">
-        <div class="panel-head"><h2>Ліміти</h2><span class="panel-note">по статтях</span></div>
-        <div id="budgetList"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head"><h2>Розклад витрат</h2><span class="panel-note" id="donutNote"></span></div>
-        <div id="donutWrap"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head"><h2>Схрон</h2><button class="btn" type="button" id="addGoalBtn">+ заначка</button></div>
-        <div id="goalsList"></div>
-        <form id="goalForm" class="stack-form" hidden>
-          <input type="text" name="name" placeholder="Назва" maxlength="60" required />
-          <input type="text" name="target" inputmode="decimal" placeholder="Ціль, ₴" required />
-          <input type="date" name="deadline" aria-label="Дедлайн" />
-          <button class="btn-primary" type="submit">Додати</button>
-        </form>
-        <div id="hallOfFame"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
-        <div id="trendWrap"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head"><h2>Найближчі списання</h2><span class="panel-note" id="upcomingNote"></span></div>
-        <div id="upcomingList"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head"><h2>Дельта до минулого</h2><span class="panel-note">по статтях</span></div>
-        <div id="deltaList"></div>
-      </section>
-    </div>
-
-    <section class="panel panel-ledger">
+    <section class="panel panel-ledger panel-ledger-priority">
       <div class="ledger-head">
-        <h2>Журнал</h2>
+        <div class="ledger-title">
+          <h2>Журнал</h2>
+          <span class="panel-note" id="ledgerSummary">останні рухи по общаку</span>
+        </div>
         <div class="month-nav">
           <button class="icon-btn" type="button" id="prevMonth" aria-label="Попередній місяць">‹</button>
           <span class="month-label" id="monthLabel"></span>
@@ -139,6 +67,7 @@
         
         <input type="text" name="amount" inputmode="decimal" autocomplete="off" placeholder="Сума, ₴" required aria-label="Сума" />
         <input type="text" name="note" placeholder="Нотатка" maxlength="120" aria-label="Нотатка" />
+        <label class="mini-check" id="reserveToggle"><input type="checkbox" name="reserve" />З резерву</label>
         <button class="btn-primary" type="submit">Додати</button>
         <button class="btn" type="button" id="repeatLast" title="Повторити останню операцію">⟲</button>
         <button class="btn" type="button" id="aiBtn" hidden>✎ Текстом</button>
@@ -174,13 +103,71 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Дата</th><th>Стаття</th><th>Гаманець</th><th>Нотатка</th><th class="num">Сума</th><th></th></tr>
+            <tr><th>Дата</th><th>Стаття</th><th>Мітка</th><th>Нотатка</th><th class="num">Сума</th><th></th></tr>
           </thead>
           <tbody id="txBody"></tbody>
         </table>
       </div>
       <div class="empty-note" id="txEmpty" hidden>Тут порожньо, паши давай.</div>
     </section>
+
+    <div class="bento" data-allowance="on">
+      <div class="cell cell-hero" id="allowanceCard">
+        <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
+        <span class="denomination money" id="allowanceValue">—</span>
+        <div class="cell-meta">
+          <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
+          <span id="allowanceHint"></span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
+      </div>
+
+      <div class="cell cell-balance">
+        <span class="cell-label">Общак <span class="cell-sub2">заг. баланс</span></span>
+        <span class="cell-value money" id="statBalance">0,00 ₴</span>
+        <div class="cell-sub" id="statBalanceSub"></div>
+        <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="cell cell-in">
+        <span class="cell-label">Заходить <span class="cell-sub2">план на місяць</span></span>
+        <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
+        <div class="cell-sub" id="statIncomeSub"></div>
+      </div>
+
+      <div class="cell cell-out">
+        <span class="cell-label">Спускаємо <span class="cell-sub2">витрати/місяць</span></span>
+        <span class="cell-value negative money" id="statExpense">0,00 ₴</span>
+        <div class="cell-sub" id="statExpenseSub"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <section class="panel panel-week-hero" id="weekForecastPanel" hidden>
+        <div class="panel-head"><h2>Тиждень</h2><span class="panel-note" id="weekForecastMeta"></span></div>
+        <div class="week-board" id="weekForecastGrid"></div>
+      </section>
+
+      <section class="panel panel-budget-sculpt">
+        <div class="panel-head"><h2>Ліміти</h2><span class="panel-note">по статтях</span></div>
+        <div id="budgetList"></div>
+      </section>
+
+      <section class="panel panel-orbit">
+        <div class="panel-head"><h2>Розклад витрат</h2><span class="panel-note" id="donutNote"></span></div>
+        <div id="donutWrap"></div>
+      </section>
+
+      <section class="panel panel-wave">
+        <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
+        <div id="trendWrap"></div>
+      </section>
+
+      <section class="panel panel-delta-slab">
+        <div class="panel-head"><h2>Дельта до минулого</h2><span class="panel-note">по статтях</span></div>
+        <div id="deltaList"></div>
+      </section>
+    </div>
   </section>
 
   <section class="view" id="view-year" hidden>
@@ -239,10 +226,58 @@
         <div id="debtList"></div>
       </section>
 
+    </div>
+  </section>
+
+  <section class="view" id="view-settings" hidden>
+    <div class="grid-2">
       <section class="panel">
-        <div class="panel-head"><h2>Налаштування</h2></div>
-        <label class="setting-row"><span>Дні ЗП (через кому)</span>
+        <div class="panel-head"><h2>Місячний план</h2><span class="panel-note">ЗП і дні надходження</span></div>
+        <label class="setting-row"><span>ЗП за місяць</span>
+          <input type="text" id="salaryAmount" inputmode="decimal" placeholder="70000" /></label>
+        <label class="setting-row"><span>Дні надходження</span>
           <input type="text" id="salaryDays" inputmode="numeric" placeholder="5, 20" /></label>
+        <div class="setting-note" id="salaryPlanNote"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Тиждень</h2><span class="panel-note">План, резерв і денні ліміти</span></div>
+        <label class="setting-row"><span>Сьогодні можна</span>
+          <input type="checkbox" id="allowanceEnabled" /></label>
+        <label class="setting-row"><span>Всього на тиждень</span>
+          <input type="text" id="weekBudget" inputmode="decimal" placeholder="10000" /></label>
+        <label class="setting-row"><span>Резерв на тиждень</span>
+          <input type="text" id="weekReserve" inputmode="decimal" placeholder="2000" /></label>
+        <div class="week-grid">
+          <label><span>Пн</span><input type="text" inputmode="decimal" data-weekday="0" placeholder="0" /></label>
+          <label><span>Вт</span><input type="text" inputmode="decimal" data-weekday="1" placeholder="0" /></label>
+          <label><span>Ср</span><input type="text" inputmode="decimal" data-weekday="2" placeholder="0" /></label>
+          <label><span>Чт</span><input type="text" inputmode="decimal" data-weekday="3" placeholder="0" /></label>
+          <label><span>Пт</span><input type="text" inputmode="decimal" data-weekday="4" placeholder="0" /></label>
+          <label><span>Сб</span><input type="text" inputmode="decimal" data-weekday="5" placeholder="0" /></label>
+          <label><span>Нд</span><input type="text" inputmode="decimal" data-weekday="6" placeholder="0" /></label>
+        </div>
+        <div class="setting-note" id="weekPlanStatus"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Кастомізація витрат</h2><span class="panel-note">створюй секції та кольори</span></div>
+        <form id="expenseCategoryForm" class="stack-form expense-cat-form">
+          <input type="text" name="name" placeholder="Нова категорія" maxlength="28" required />
+          <input type="color" name="color" value="#5aa8ba" aria-label="Колір категорії" />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="expenseCategoryList"></div>
+        <div class="setting-note" id="expenseCategoryNote"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Навар</h2><span class="panel-note">Переноси по місяцях</span></div>
+        <div class="records" id="navarList"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Сервіс</h2></div>
         <label class="setting-row"><span>Спокійний режим</span>
           <input type="checkbox" id="calmMode" /></label>
         <label class="setting-row"><span>PIN на вхід</span>
