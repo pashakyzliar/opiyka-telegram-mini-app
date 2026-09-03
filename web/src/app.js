@@ -473,7 +473,7 @@
     var balance = totalBalance();
     animateValue(document.getElementById("statBalance"), prevStat.balance, balance, fmt, true);
     prevStat.balance = balance;
-    var cash = walletBalance("Кеш");
+    var cash = balance;
     document.getElementById("statBalanceSub").innerHTML =
       
       '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(cash)) + '</span>';
@@ -502,7 +502,7 @@
     }
 
     
-    var inCash = sum(mtx.filter(function (t) { return isIncome(t) && t.wallet === "Кеш"; }));
+    var inCash = income;
     document.getElementById("statIncomeSub").innerHTML =
       
       '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(inCash)) + '</span>';
@@ -1213,7 +1213,7 @@
     var patch = {};
     // Old rows carried the wallet in `category` for income and had none at all
     // for expenses.
-    var needWallet = state.transactions.filter(function (t) { return !t.wallet || t.wallet === "Карта"; });
+    var needWallet = state.transactions.filter(function (t) { return !t.wallet; });
     if (needWallet.length) {
       needWallet.forEach(function (t) {
         var up = {};
