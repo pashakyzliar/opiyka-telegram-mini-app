@@ -197,6 +197,26 @@ h1, h2, .cell-label, .panel-note, .btn, .btn-primary, .viewtab, th {
 
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 6px 0 18px; }
 .brand h1 { font-size: 30px; margin: 0; }
+.brand-graffiti {
+  font-family: Impact, Haettenschweiler, "Arial Black", sans-serif;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--gold-hi);
+  -webkit-text-stroke: 1px var(--gold-lo);
+  text-shadow: 3px 3px 0 var(--gold-lo), 5px 5px 0 rgba(29, 42, 34, .28);
+  transform: skew(-7deg) rotate(-2deg);
+  transform-origin: left center;
+}
+.tagline {
+  font-family: "Brush Script MT", "Segoe Script", cursive;
+  font-size: 15px;
+  letter-spacing: .04em;
+  text-transform: none;
+  transform: rotate(-2deg);
+  transform-origin: left center;
+}
 .tagline { font-family: "Bad Script", cursive; text-transform: none; letter-spacing: 0; color: var(--ink-muted); font-size: 15px; }
 .topbar-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -873,6 +893,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 @media (max-width: 720px) {
   .app { padding: 0 11px 52px; }
   .brand h1 { font-size: 24px; }
+  .brand-graffiti { letter-spacing: .05em; -webkit-text-stroke-width: .7px; text-shadow: 2px 2px 0 var(--gold-lo), 3px 3px 0 rgba(29, 42, 34, .25); }
   .topbar { align-items: flex-start; }
   .quick-add { gap: 7px; }
   .quick-add input[name="amount"] { width: 100%; }
