@@ -8,8 +8,8 @@ const { existsSync } = require("node:fs");
 
 loadDotEnv(path.join(__dirname, ".env"));
 
-// ЗМІНА: AI-клієнт. Модуль сам вирішує, чи він налаштований (AI_BASE_URL).
 const ai = require("./ai");
+const botAi = require("./bot-ai");
 
 const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = String(process.env.BOT_TOKEN || "");
@@ -39,7 +39,11 @@ function defaultSettings() {
 
 function emptyAccount() {
   return {
-    transactions: [], goals: [], recurring: [], debts: [], amortize: [],
+    transactions: [],
+    goals: [],
+    recurring: [],
+    debts: [],
+    amortize: [],
     settings: defaultSettings()
   };
 }
@@ -116,8 +120,11 @@ async function bodyJson(req) {
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
-  try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-  catch (error) { throw Object.assign(new Error("Invalid JSON"), { code: "invalid_json" }); }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch (error) {
+    throw Object.assign(new Error("Invalid JSON"), { code: "invalid_json" });
+  }
 }
 
 function safeEqualHex(a, b) {
@@ -149,8 +156,11 @@ function verifyTelegramInitData(raw) {
   }
 
   let user;
-  try { user = JSON.parse(params.get("user") || "{}"); }
-  catch (error) { throw Object.assign(new Error("Invalid Telegram user"), { code: "invalid_user" }); }
+  try {
+    user = JSON.parse(params.get("user") || "{}");
+  } catch (error) {
+    throw Object.assign(new Error("Invalid Telegram user"), { code: "invalid_user" });
+  }
   if (!user || user.id === undefined || user.id === null) {
     throw Object.assign(new Error("Telegram user is missing"), { code: "missing_user" });
   }
@@ -186,51 +196,73 @@ function cleanRows(rows) {
   });
 }
 
+async function askAiForUser(userId, prompt) {
+  const gate = ai.reserve(userId);
+  if (!gate.ok) throw Object.assign(new Error(gate.message), { code: gate.code });
+  try {
+    const out = await ai.askJson(prompt);
+    if (out.usage) {
+      console.log("AI", userId, out.model, JSON.stringify(out.usage), gate.used + "/" + gate.limit);
+    }
+    return out.result;
+  } catch (error) {
+    console.error("AI помилка:", error.code || "provider_error", error.message);
+    throw error;
+  }
+}
+
+async function addTransactionForUser(userId, payload) {
+  const { store, account } = await accountFor(userId);
+  const row = Object.assign({}, payload);
+  row.id = String(row.id || newId());
+  if (!row.createdAt) row.createdAt = new Date().toISOString();
+  const index = account.transactions.findIndex((item) => item.id === row.id);
+  if (index >= 0) account.transactions[index] = row;
+  else account.transactions.push(row);
+  await persistStore(store);
+  return row;
+}
+
+async function removeTransactionForUser(userId, id) {
+  const { store, account } = await accountFor(userId);
+  const index = account.transactions.findIndex((item) => item.id === id);
+  if (index < 0) return null;
+  const removed = account.transactions[index];
+  account.transactions.splice(index, 1);
+  await persistStore(store);
+  return removed;
+}
+
 async function api(req, res, pathname) {
   let auth;
-  try { auth = authenticatedUser(req); }
-  catch (error) { return errorJson(res, error.code === "server_not_configured" ? 503 : 401, error.code || "unauthorized", error.message); }
+  try {
+    auth = authenticatedUser(req);
+  } catch (error) {
+    return errorJson(res, error.code === "server_not_configured" ? 503 : 401, error.code || "unauthorized", error.message);
+  }
 
   const { store, account } = await accountFor(auth.id);
   if (req.method === "GET" && pathname === "/api/state") return json(res, 200, account);
 
-  /* --------------------------- ЗМІНА: AI --------------------------- */
-  // Обидва маршрути стоять ДО регулярки колекцій: інакше "ai" впало б у неї
-  // і повернуло 404, бо в COLLECTIONS його немає.
-
   if (req.method === "GET" && pathname === "/api/ai/status") {
-    // Дешево і без витрат квоти: app.js питає це на старті, щоб вирішити,
-    // показувати кнопку AI чи ні.
     if (!ai.configured()) return json(res, 200, { enabled: false });
     return json(res, 200, Object.assign({ enabled: true, model: ai.AI_MODEL }, ai.quotaFor(auth.id)));
   }
 
   if (req.method === "POST" && pathname === "/api/ai") {
     if (!ai.configured()) return errorJson(res, 503, "not_granted", "AI не налаштовано на сервері.");
-
-    // Спершу читаємо тіло, потім резервуємо слот: порожній запит не має
-    // з'їдати квоту. Але резерв усе одно стоїть ДО звернення до провайдера.
     const payload = await bodyJson(req);
     const prompt = String(payload && payload.prompt || "").trim();
     if (!prompt) return errorJson(res, 400, "bad_request", "Порожній запит до AI.");
-
-    const gate = ai.reserve(auth.id);
-    if (!gate.ok) return errorJson(res, 429, gate.code, gate.message);
-
     try {
-      const out = await ai.askJson(prompt);
-      if (out.usage) {
-        console.log("AI", auth.id, out.model, JSON.stringify(out.usage), gate.used + "/" + gate.limit);
-      }
-      return json(res, 200, { result: out.result });
+      const result = await askAiForUser(auth.id, prompt);
+      return json(res, 200, { result });
     } catch (error) {
       const code = error.code || "provider_error";
       const status = code === "not_granted" ? 503 : code === "rate_limited" ? 429 : 502;
-      console.error("AI помилка:", code, error.message);
       return errorJson(res, status, code, error.message);
     }
   }
-  /* ------------------------- кінець змін AI ------------------------- */
 
   if (req.method === "PUT" && pathname === "/api/settings") {
     const payload = await bodyJson(req);
@@ -293,14 +325,22 @@ async function api(req, res, pathname) {
 }
 
 const MIME = {
-  ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml", ".woff2": "font/woff2", ".ico": "image/x-icon"
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".woff2": "font/woff2",
+  ".ico": "image/x-icon"
 };
 
 async function staticFile(res, pathname) {
   let decoded;
-  try { decoded = decodeURIComponent(pathname); } catch (error) { return errorJson(res, 400, "bad_path", "Bad path"); }
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch (error) {
+    return errorJson(res, 400, "bad_path", "Bad path");
+  }
   if (decoded === "/") decoded = "/index.html";
   const file = path.resolve(WEB_ROOT, "." + decoded);
   const relative = path.relative(WEB_ROOT, file);
@@ -321,33 +361,145 @@ async function staticFile(res, pathname) {
 async function telegramCall(method, payload) {
   if (!BOT_TOKEN) return null;
   const response = await fetch("https://api.telegram.org/bot" + BOT_TOKEN + "/" + method, {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
   });
   const data = await response.json();
   if (!data.ok) throw new Error(data.description || "Telegram API error");
   return data.result;
 }
 
+function appMarkup() {
+  if (!PUBLIC_URL) return undefined;
+  return { inline_keyboard: [[{ text: "Відкрити Копійку", web_app: { url: PUBLIC_URL } }]] };
+}
+
+function undoMarkup(txId) {
+  const rows = [[{ text: "Скасувати", callback_data: "undo_tx:" + txId }]];
+  if (PUBLIC_URL) rows.push([{ text: "Відкрити Копійку", web_app: { url: PUBLIC_URL } }]);
+  return { inline_keyboard: rows };
+}
+
+async function sendBotMessage(chatId, text, replyMarkup) {
+  const payload = { chat_id: chatId, text };
+  if (replyMarkup) payload.reply_markup = replyMarkup;
+  return telegramCall("sendMessage", payload);
+}
+
+function botErrorText(error) {
+  if (!error) return "Не вийшло виконати запит.";
+  if (error.code === "rate_limited" || error.code === "timeout" || error.code === "provider_unreachable") return error.message;
+  if (error.code === "not_granted") return "AI на сервері не налаштовано.";
+  return "Не вийшло виконати запит.";
+}
+
+async function handleBotStart(message) {
+  const chatId = message.chat.id;
+  const intro = "Копійка в боті.\n" + botAi.helpText(PUBLIC_URL);
+  return sendBotMessage(chatId, intro, appMarkup());
+}
+
+async function handleBotWrite(message) {
+  const text = String(message.text || "").trim();
+  const userId = String(message.from && message.from.id || "");
+  const chatId = message.chat.id;
+  const data = await askAiForUser(userId, botAi.buildWritePrompt(text));
+  const rawRows = Array.isArray(data) ? data : (data && Array.isArray(data.operations) ? data.operations : []);
+  const rows = rawRows.map((row) => botAi.normalizeDraft(row)).filter(Boolean);
+  const note = rows.length === 1 ? botAi.noteFromUserText(text) : "";
+  if (rows.length === 1 && note) rows[0].note = note;
+  if (!rows.length || (rows.length === 1 && !rows[0].note)) {
+    return sendBotMessage(chatId, botAi.formatWriteReply([]), appMarkup());
+  }
+  const saved = [];
+  for (const row of rows) saved.push(await addTransactionForUser(userId, row));
+  const markup = saved.length === 1 ? undoMarkup(saved[0].id) : appMarkup();
+  return sendBotMessage(chatId, botAi.formatWriteReply(saved), markup);
+}
+
+async function handleBotAsk(message) {
+  const text = String(message.text || "").trim();
+  const userId = String(message.from && message.from.id || "");
+  const chatId = message.chat.id;
+  const filterPayload = await askAiForUser(userId, botAi.buildAskPrompt(text));
+  const filter = botAi.normalizeFilter(filterPayload);
+  const { account } = await accountFor(userId);
+  const rows = botAi.filterTransactions(account.transactions, filter);
+  const total = botAi.sumTransactions(rows);
+  return sendBotMessage(chatId, botAi.formatAskReply(filter, rows, total), appMarkup());
+}
+
+async function handleBotCallback(query) {
+  const id = String(query && query.id || "");
+  const data = String(query && query.data || "");
+  if (!id) return;
+  if (!/^undo_tx:/.test(data)) {
+    await telegramCall("answerCallbackQuery", { callback_query_id: id });
+    return;
+  }
+  const txId = data.slice("undo_tx:".length);
+  const userId = String(query.from && query.from.id || "");
+  const removed = await removeTransactionForUser(userId, txId);
+  const notice = removed ? "Операцію скасовано." : "Операцію вже скасовано.";
+  await telegramCall("answerCallbackQuery", { callback_query_id: id, text: notice });
+  if (!query.message || !query.message.chat || !query.message.message_id) return;
+  const currentText = String(query.message.text || "");
+  const nextText = removed && !/Скасовано\.$/.test(currentText) ? currentText + "\n\nСкасовано." : currentText;
+  try {
+    await telegramCall("editMessageText", {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id,
+      text: nextText || notice,
+      reply_markup: { inline_keyboard: [] }
+    });
+  } catch (error) {
+    await telegramCall("editMessageReplyMarkup", {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id,
+      reply_markup: { inline_keyboard: [] }
+    });
+  }
+}
+
+async function handleBotUpdate(update) {
+  if (update && update.callback_query) return handleBotCallback(update.callback_query);
+  const message = update && update.message;
+  if (!message || !message.chat || message.chat.type !== "private") return;
+  const text = String(message.text || "").trim();
+  if (!text) return;
+
+  const route = botAi.routeBotMessage(text);
+  if (route === "app" || route === "help") return handleBotStart(message);
+  if (!ai.configured()) {
+    return sendBotMessage(message.chat.id, "AI на сервері не налаштовано.\n" + botAi.helpText(PUBLIC_URL), appMarkup());
+  }
+  try {
+    if (route === "write") return handleBotWrite(message);
+    if (route === "ask") return handleBotAsk(message);
+    return handleBotStart(message);
+  } catch (error) {
+    return sendBotMessage(message.chat.id, botErrorText(error), appMarkup());
+  }
+}
+
 async function botPolling() {
-  if (!BOT_TOKEN || !PUBLIC_URL) {
-    console.log("Бот не запущений: заповни BOT_TOKEN і PUBLIC_URL у server/.env.");
+  if (!BOT_TOKEN) {
+    console.log("Бот не запущений: заповни BOT_TOKEN у server/.env.");
     return;
   }
   console.log("Telegram bot polling увімкнено.");
   let offset = 0;
   while (true) {
     try {
-      const updates = await telegramCall("getUpdates", { offset, timeout: 25, allowed_updates: ["message"] });
+      const updates = await telegramCall("getUpdates", {
+        offset,
+        timeout: 25,
+        allowed_updates: ["message", "callback_query"]
+      });
       for (const update of updates || []) {
         offset = Math.max(offset, Number(update.update_id) + 1);
-        const message = update.message;
-        const text = String(message && message.text || "");
-        if (!message || !message.chat || !/^\/(start|app)(?:@\w+)?/.test(text)) continue;
-        await telegramCall("sendMessage", {
-          chat_id: message.chat.id,
-          text: "Копійка — твій особистий общак. Відкривай Mini App:",
-          reply_markup: { inline_keyboard: [[{ text: "Відкрити Копійку", web_app: { url: PUBLIC_URL } }]] }
-        });
+        await handleBotUpdate(update);
       }
     } catch (error) {
       console.error("Telegram polling:", error.message);
@@ -358,7 +510,10 @@ async function botPolling() {
 
 const server = http.createServer(async (req, res) => {
   corsHeaders(res);
-  if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    return res.end();
+  }
   const url = new URL(req.url, "http://localhost");
   try {
     if (url.pathname === "/health") return json(res, 200, { ok: true });
@@ -367,7 +522,12 @@ const server = http.createServer(async (req, res) => {
     return await staticFile(res, url.pathname);
   } catch (error) {
     console.error("Request error:", error);
-    return errorJson(res, error.code === "invalid_json" || error.code === "body_too_large" ? 400 : 500, error.code || "server_error", error.message || "Server error");
+    return errorJson(
+      res,
+      error.code === "invalid_json" || error.code === "body_too_large" ? 400 : 500,
+      error.code || "server_error",
+      error.message || "Server error"
+    );
   }
 });
 
