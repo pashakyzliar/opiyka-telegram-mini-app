@@ -749,13 +749,21 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   border-bottom: 1px solid var(--hair);
 }
 .expense-cat-form input[name="name"] { flex: 1 1 180px; }
+.expense-cat-form input[name="icon"] {
+  width: 68px;
+  text-align: center;
+}
 .expense-cat-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
-  gap: 10px;
-  align-items: center;
+  gap: 8px;
   padding: 10px 0;
   border-bottom: 1px solid var(--hair);
+}
+.expense-cat-head {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
 }
 .expense-cat-row:last-child { border-bottom: 0; }
 .expense-cat-row input[type="text"] { width: 100%; }
@@ -764,6 +772,31 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   min-width: 48px;
   padding: 4px;
   border-radius: 10px;
+}
+.expense-icon-btn {
+  min-width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--panel) 90%, white);
+  font-size: 22px;
+}
+.expense-icon-editor {
+  display: grid;
+  gap: 8px;
+  padding-left: 24px;
+}
+.expense-icon-picks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.icon-chip {
+  min-height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--panel) 90%, white);
+  font-size: 20px;
 }
 .expense-cat-dot {
   width: 14px;
@@ -920,15 +953,18 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .panel-week-hero .week-board { grid-template-columns: 1fr; }
   .week-grid { grid-template-columns: 1fr; }
   .week-grid input { width: 110px; }
-  .expense-cat-row {
-    grid-template-columns: auto 1fr auto;
+  .expense-cat-head {
+    grid-template-columns: auto auto 1fr auto;
   }
-  .expense-cat-row input[type="color"] {
+  .expense-cat-head input[type="color"] {
     justify-self: end;
   }
-  .expense-cat-row .btn,
-  .expense-cat-row .icon-btn {
-    grid-column: span 3;
+  .expense-cat-head .btn,
+  .expense-cat-head .icon-btn {
+    grid-column: span 4;
+  }
+  .expense-icon-picks {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .rec-row { grid-template-columns: auto 1fr auto auto; row-gap: 4px; }
   .rec-row .rec-wallet, .rec-row .rec-day { grid-column: span 2; }

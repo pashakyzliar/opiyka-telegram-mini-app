@@ -27,6 +27,13 @@ function escapeRegex(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function escapeHtml(text) {
+  return String(text == null ? "" : text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function stripWords(text, words) {
   if (!words.length) return text;
   const pattern = "(^|\\s)(" + words.map(escapeRegex).join("|") + ")(?=\\s|$)";
@@ -64,12 +71,29 @@ function noteFromUserText(text) {
   return value.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
-function buildWritePrompt(text) {
+function expenseCategoryRows(list) {
+  const source = Array.isArray(list) ? list : [];
+  const rows = source
+    .map((row) => row && typeof row === "object" ? row : { name: String(row || "") })
+    .filter((row) => row && String(row.name || "").trim());
+  if (rows.length) return rows;
+  return EXPENSE_CATS.map((name) => ({ name, icon: "" }));
+}
+
+function expenseCategoryNames(list) {
+  return expenseCategoryRows(list).map((row) => row.name);
+}
+
+function normalizeLower(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("uk-UA");
+}
+
+function buildWritePrompt(text, expenseCategories) {
   const today = todayISO();
   return [
     "Ти розбираєш український текст про особисті фінанси на окремі операції.",
     "Сьогодні: " + today + ".",
-    "Статті витрат: " + EXPENSE_CATS.join(", ") + ".",
+    "Статті витрат: " + expenseCategoryNames(expenseCategories).join(", ") + ".",
     "Статті доходу: " + INCOME_CATS.join(", ") + ".",
     "Гаманці: " + WALLETS.join(", ") + ".",
     "Поверни ТІЛЬКИ JSON-масив об'єктів виду " +
@@ -83,11 +107,11 @@ function buildWritePrompt(text) {
   ].join("\n");
 }
 
-function buildAskPrompt(question) {
+function buildAskPrompt(question, expenseCategories) {
   return [
     "Користувач питає про свої фінанси. Поверни ТІЛЬКИ JSON-фільтр, не рахуй сам.",
     "Сьогодні: " + todayISO() + ".",
-    "Статті витрат: " + EXPENSE_CATS.join(", ") + ".",
+    "Статті витрат: " + expenseCategoryNames(expenseCategories).join(", ") + ".",
     "Статті доходу: " + INCOME_CATS.join(", ") + ".",
     'Формат: {"categories":["..."],"type":"expense"|"income"|null,"from":"YYYY-MM-DD","to":"YYYY-MM-DD","title":"короткий підпис"}',
     "Порожній масив categories означає всі категорії.",
@@ -97,12 +121,12 @@ function buildAskPrompt(question) {
   ].join("\n");
 }
 
-function normalizeDraft(row) {
+function normalizeDraft(row, expenseCategories) {
   if (!row || typeof row !== "object") return null;
   const amount = parseAmount(row.amount);
   if (amount == null) return null;
   const type = row.type === "income" ? "income" : "expense";
-  const categories = type === "income" ? INCOME_CATS : EXPENSE_CATS;
+  const categories = type === "income" ? INCOME_CATS : expenseCategoryNames(expenseCategories);
   const category = categories.includes(row.category) ? row.category : categories[0];
   const wallet = WALLETS.includes(row.wallet) ? row.wallet : WALLETS[0];
   const date = isIsoDate(row.date) ? String(row.date) : todayISO();
@@ -110,12 +134,13 @@ function normalizeDraft(row) {
   return { type, category, amount, wallet, date, note };
 }
 
-function normalizeFilter(value) {
+function normalizeFilter(value, expenseCategories) {
   const today = todayISO();
   const fallbackFrom = isoAdd(today, -365);
   const result = value && typeof value === "object" ? value : {};
+  const allowedExpense = expenseCategoryNames(expenseCategories);
   const categories = Array.isArray(result.categories)
-    ? result.categories.filter((cat) => EXPENSE_CATS.includes(cat) || INCOME_CATS.includes(cat))
+    ? result.categories.filter((cat) => allowedExpense.includes(cat) || INCOME_CATS.includes(cat))
     : [];
   const type = result.type === "expense" || result.type === "income" ? result.type : null;
   const from = isIsoDate(result.from) ? String(result.from) : fallbackFrom;
@@ -155,20 +180,78 @@ function formatDateRange(from, to) {
   return from || to || "";
 }
 
-function formatWriteReply(rows) {
+function bar(pct) {
+  const safe = Math.max(0, Number(pct) || 0);
+  const filled = Math.min(10, Math.round((safe / 100) * 10));
+  return "▰".repeat(filled) + "▱".repeat(10 - filled);
+}
+
+function indicator(pct) {
+  const safe = Number(pct) || 0;
+  if (safe >= 100) return "🔴";
+  if (safe >= 80) return "🟠";
+  return "🟢";
+}
+
+function categoryEmoji(name, type, expenseCategories) {
+  if (type !== "expense") return "";
+  const row = expenseCategoryRows(expenseCategories).find((item) => item.name === name);
+  return row && row.icon ? row.icon : "";
+}
+
+function formatNote(note, category) {
+  const clean = String(note || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (normalizeLower(clean) === normalizeLower(category)) return "";
+  return escapeHtml(clean);
+}
+
+function formatCategoryLabel(row, expenseCategories) {
+  const icon = categoryEmoji(row.category, row.type, expenseCategories);
+  return escapeHtml(icon ? icon + " " + row.category : row.category);
+}
+
+function formatAllowanceBlock(info, show) {
+  if (!info || !show) return "";
+  const safeLimit = Math.max(0, Number(info.todayLimit) || 0);
+  const spentToday = Number(info.spentToday) || 0;
+  const todayAvailable = Number(info.todayAvailable) || 0;
+  const overBy = Math.max(0, Number(info.overBy) || 0);
+  const pct = safeLimit > 0 ? (spentToday / safeLimit) * 100 : 100;
+  if (!info.enabled || !info.configured) {
+    return "\nСьогодні: " + escapeHtml(formatMoney(spentToday));
+  }
+  if (todayAvailable < 0 || pct >= 100) {
+    return "\nСьогодні: " + escapeHtml(formatMoney(spentToday)) +
+      "\nПеревитрата <b>" + escapeHtml(formatMoney(overBy)) + "</b>";
+  }
+  return "\nСьогодні: " + escapeHtml(formatMoney(spentToday)) +
+    " · лишилось <b>" + escapeHtml(formatMoney(todayAvailable)) + "</b>" +
+    "\n<code>" + bar(pct) + "  " + Math.round(pct) + "%</code>";
+}
+
+function formatWriteReply(rows, allowanceInfo) {
   if (!rows.length) return "Не зміг розібрати запис. Спробуй написати щось на кшталт: 180 грн Glovo";
+  const today = todayISO();
+  const expenseCategories = allowanceInfo && allowanceInfo.expenseCategories;
+  const showAllowance = rows.some((row) => row.type === "expense" && row.date === today);
   if (rows.length === 1) {
     const row = rows[0];
-    const note = row.note ? "\nНотатка: " + row.note : "";
-    return "Записав " + (row.type === "income" ? "дохід" : "витрату") +
-      ": " + formatMoney(row.amount) +
-      "\nКатегорія: " + row.category +
-      note +
-      "\nДата: " + row.date;
+    const note = formatNote(row.note, row.category);
+    const when = row.date === today ? "" : "\n<code>" + escapeHtml(row.date) + "</code>";
+    return "<b>" + escapeHtml(formatMoney(row.amount)) + "</b> — " + formatCategoryLabel(row, expenseCategories) +
+      (note ? " · " + note : "") +
+      formatAllowanceBlock(allowanceInfo, showAllowance && row.type === "expense") +
+      when;
   }
-  return "Записав " + rows.length + " операції:\n" + rows.map((row, index) => {
-    return (index + 1) + ". " + row.category + " — " + formatMoney(row.amount) + (row.note ? " — " + row.note : "");
-  }).join("\n");
+  const lines = rows.map((row, index) => {
+    const note = formatNote(row.note, row.category);
+    const when = row.date === today ? "" : " · " + row.date;
+    return (index + 1) + ". " + formatCategoryLabel(row, expenseCategories) + " — " +
+      escapeHtml(formatMoney(row.amount)) + (note ? " — " + note : "") + when;
+  });
+  const allowanceBlock = formatAllowanceBlock(allowanceInfo, showAllowance);
+  return "Записав " + rows.length + " операції:\n" + lines.join("\n") + allowanceBlock;
 }
 
 function formatAskReply(filter, rows, total) {
@@ -223,9 +306,13 @@ module.exports = {
   normalizeFilter,
   filterTransactions,
   sumTransactions,
+  bar,
+  indicator,
+  categoryEmoji,
   formatWriteReply,
   formatAskReply,
   routeBotMessage,
   helpText,
-  formatMoney
+  formatMoney,
+  daysInMonth
 };

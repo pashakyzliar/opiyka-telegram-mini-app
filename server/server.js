@@ -10,6 +10,7 @@ loadDotEnv(path.join(__dirname, ".env"));
 
 const ai = require("./ai");
 const botAi = require("./bot-ai");
+const allowance = require("./allowance");
 
 const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = String(process.env.BOT_TOKEN || "");
@@ -20,13 +21,13 @@ const DATA_FILE = path.resolve(process.env.DATA_FILE || path.join(__dirname, "da
 const MAX_BODY = 2 * 1024 * 1024;
 const COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
 const DEFAULT_EXPENSE_CATEGORIES = [
-  { name: "Машина", color: "#5aa8ba" },
-  { name: "Пайка", color: "#c08a4a" },
-  { name: "Хавка", color: "#63b06e" },
-  { name: "Дурка", color: "#b07dad" },
-  { name: "Продукти", color: "#d29a5c" },
-  { name: "Сіги", color: "#97a851" },
-  { name: "Подпіски", color: "#7d8ecb" }
+  { name: "Машина", color: "#5aa8ba", icon: "" },
+  { name: "Пайка", color: "#c08a4a", icon: "" },
+  { name: "Хавка", color: "#63b06e", icon: "" },
+  { name: "Дурка", color: "#b07dad", icon: "" },
+  { name: "Продукти", color: "#d29a5c", icon: "" },
+  { name: "Сіги", color: "#97a851", icon: "" },
+  { name: "Подпіски", color: "#7d8ecb", icon: "" }
 ];
 
 function loadDotEnv(file) {
@@ -46,7 +47,7 @@ function loadDotEnv(file) {
 function defaultSettings() {
   return {
     budgets: {},
-    expenseCategories: DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color })),
+    expenseCategories: DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color, icon: row.icon })),
     salaryAmount: 0,
     salaryDays: [5, 20],
     allowanceEnabled: false,
@@ -60,6 +61,14 @@ function defaultSettings() {
     streakRecord: 0,
     bestRate: null
   };
+}
+
+function normalizeExpenseCategoryIcon(raw) {
+  const value = String(raw == null ? "" : raw).trim();
+  if (!value || typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return "";
+  const parts = Array.from(new Intl.Segmenter("uk-UA", { granularity: "grapheme" }).segment(value), (part) => part.segment);
+  if (parts.length !== 1) return "";
+  return Buffer.byteLength(parts[0], "utf8") <= 8 ? parts[0] : "";
 }
 
 function emptyAccount() {
@@ -113,12 +122,15 @@ function normalizeExpenseCategories(list) {
     if (seen.has(key)) return;
     seen.add(key);
     const rawColor = String(row && row.color ? row.color : "").trim().toLowerCase();
+    const matched = DEFAULT_EXPENSE_CATEGORIES.find((item) => item.name.toLocaleLowerCase("uk-UA") === key);
+    const icon = normalizeExpenseCategoryIcon(row && row.icon);
     out.push({
       name,
-      color: /^#[0-9a-f]{6}$/.test(rawColor) ? rawColor : fallback.color
+      color: /^#[0-9a-f]{6}$/.test(rawColor) ? rawColor : fallback.color,
+      icon: icon || (matched ? matched.icon : "")
     });
   });
-  return out.length ? out : DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color }));
+  return out.length ? out : DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color, icon: row.icon }));
 }
 
 async function readStore() {
@@ -452,14 +464,15 @@ function appMarkup() {
 }
 
 function undoMarkup(txId) {
-  const rows = [[{ text: "Скасувати", callback_data: "undo_tx:" + txId }]];
-  if (PUBLIC_URL) rows.push([{ text: "Відкрити Копійку", web_app: { url: PUBLIC_URL } }]);
-  return { inline_keyboard: rows };
+  const row = [{ text: "Скасувати", callback_data: "undo_tx:" + txId }];
+  if (PUBLIC_URL) row.push({ text: "Копійка", web_app: { url: PUBLIC_URL } });
+  return { inline_keyboard: [row] };
 }
 
-async function sendBotMessage(chatId, text, replyMarkup) {
+async function sendBotMessage(chatId, text, replyMarkup, parseMode) {
   const payload = { chat_id: chatId, text };
   if (replyMarkup) payload.reply_markup = replyMarkup;
+  if (parseMode) payload.parse_mode = parseMode;
   return telegramCall("sendMessage", payload);
 }
 
@@ -484,27 +497,34 @@ async function handleBotWrite(message) {
   const text = String(message.text || "").trim();
   const userId = String(message.from && message.from.id || "");
   const chatId = message.chat.id;
-  const data = await askAiForUser(userId, botAi.buildWritePrompt(text));
+  const { account } = await accountFor(userId);
+  const expenseCategories = account.settings.expenseCategories;
+  const data = await askAiForUser(userId, botAi.buildWritePrompt(text, expenseCategories));
   const rawRows = Array.isArray(data) ? data : (data && Array.isArray(data.operations) ? data.operations : []);
-  const rows = rawRows.map((row) => botAi.normalizeDraft(row)).filter(Boolean);
+  const rows = rawRows.map((row) => botAi.normalizeDraft(row, expenseCategories)).filter(Boolean);
   const note = rows.length === 1 ? botAi.noteFromUserText(text) : "";
   if (rows.length === 1 && note) rows[0].note = note;
   if (!rows.length || (rows.length === 1 && !rows[0].note)) {
-    return sendBotMessage(chatId, botAi.formatWriteReply([]), appMarkup());
+    return sendBotMessage(chatId, botAi.formatWriteReply([]), appMarkup(), "HTML");
   }
   const saved = [];
   for (const row of rows) saved.push(await addTransactionForUser(userId, row));
+  const current = await accountFor(userId);
+  const allowanceInfo = Object.assign(
+    allowance.dayAllowance(current.account, botAi.todayISO()),
+    { expenseCategories: current.account.settings.expenseCategories }
+  );
   const markup = saved.length === 1 ? undoMarkup(saved[0].id) : appMarkup();
-  return sendBotMessage(chatId, botAi.formatWriteReply(saved), markup);
+  return sendBotMessage(chatId, botAi.formatWriteReply(saved, allowanceInfo), markup, "HTML");
 }
 
 async function handleBotAsk(message) {
   const text = String(message.text || "").trim();
   const userId = String(message.from && message.from.id || "");
   const chatId = message.chat.id;
-  const filterPayload = await askAiForUser(userId, botAi.buildAskPrompt(text));
-  const filter = botAi.normalizeFilter(filterPayload);
   const { account } = await accountFor(userId);
+  const filterPayload = await askAiForUser(userId, botAi.buildAskPrompt(text, account.settings.expenseCategories));
+  const filter = botAi.normalizeFilter(filterPayload, account.settings.expenseCategories);
   const rows = botAi.filterTransactions(account.transactions, filter);
   const total = botAi.sumTransactions(rows);
   return sendBotMessage(chatId, botAi.formatAskReply(filter, rows, total), appMarkup());

@@ -5,16 +5,17 @@
 
   var EXPENSE_CATS = ["Машина", "Пайка", "Хавка", "Дурка", "Продукти", "Сіги", "Подпіски"];
   var DEFAULT_EXPENSE_CATEGORY_ROWS = [
-    { name: "Машина", color: "#5aa8ba" },
-    { name: "Пайка", color: "#c08a4a" },
-    { name: "Хавка", color: "#63b06e" },
-    { name: "Дурка", color: "#b07dad" },
-    { name: "Продукти", color: "#d29a5c" },
-    { name: "Сіги", color: "#97a851" },
-    { name: "Подпіски", color: "#7d8ecb" }
+    { name: "Машина", color: "#5aa8ba", icon: "" },
+    { name: "Пайка", color: "#c08a4a", icon: "" },
+    { name: "Хавка", color: "#63b06e", icon: "" },
+    { name: "Дурка", color: "#b07dad", icon: "" },
+    { name: "Продукти", color: "#d29a5c", icon: "" },
+    { name: "Сіги", color: "#97a851", icon: "" },
+    { name: "Подпіски", color: "#7d8ecb", icon: "" }
   ];
   var INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
   var WALLETS = ["Кеш"];
+  var EXPENSE_ICON_PRESETS = ["🚗", "🍱", "🍔", "🎉", "🛒", "🚬", "📦", "💳"];
  
   var LS_KEY = "kopiyka_v2";
   var COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
@@ -175,9 +176,22 @@
     if (/^#[0-9a-f]{6}$/.test(color)) return color;
     return fallback;
   }
+  function utf8Bytes(text) {
+    if (typeof TextEncoder === "function") return new TextEncoder().encode(String(text || "")).length;
+    return unescape(encodeURIComponent(String(text || ""))).length;
+  }
+  function normalizeExpenseCategoryIcon(raw) {
+    var value = String(raw == null ? "" : raw).trim();
+    if (!value || typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return "";
+    var segments = Array.from(new Intl.Segmenter("uk-UA", { granularity: "grapheme" }).segment(value), function (part) {
+      return part.segment;
+    });
+    if (segments.length !== 1) return "";
+    return utf8Bytes(segments[0]) <= 8 ? segments[0] : "";
+  }
   function cloneDefaultExpenseCategories() {
     return DEFAULT_EXPENSE_CATEGORY_ROWS.map(function (row) {
-      return { name: row.name, color: row.color };
+      return { name: row.name, color: row.color, icon: row.icon };
     });
   }
   function normalizeExpenseCategories(list) {
@@ -191,9 +205,13 @@
       var key = name.toLocaleLowerCase("uk-UA");
       if (seen[key]) return;
       seen[key] = true;
+      var matched = DEFAULT_EXPENSE_CATEGORY_ROWS.find(function (item) {
+        return item.name.toLocaleLowerCase("uk-UA") === key;
+      });
       out.push({
         name: name,
-        color: normalizeExpenseCategoryColor(row && row.color, fallback.color)
+        color: normalizeExpenseCategoryColor(row && row.color, fallback.color),
+        icon: normalizeExpenseCategoryIcon(row && row.icon) || (matched ? matched.icon : "")
       });
     });
     return out.length ? out : cloneDefaultExpenseCategories();
@@ -211,6 +229,17 @@
   }
   function defaultExpenseName() {
     return defaultExpenseCategory().name;
+  }
+  function expenseMeta(name) {
+    return expenseCats().find(function (row) { return row.name === name; }) || null;
+  }
+  function expenseIcon(name) {
+    var meta = expenseMeta(name);
+    return meta && meta.icon ? meta.icon : "";
+  }
+  function expenseLabel(name) {
+    var icon = expenseIcon(name);
+    return icon ? icon + " " + name : name;
   }
   function sumWeekDaily(list) {
     return normalizeWeekDaily(list).reduce(function (s, v) { return s + v; }, 0);
@@ -570,6 +599,7 @@
   }
   function recKey(id, mk) { return "rec." + id + "." + mk.replace("-", "_"); }
 
+  // ЗЕРКАЛО: server/allowance.js — міняєш тут, міняй і там
   function allowance() {
     var today = todayISO();
     var currentMk = monthKey(today);
@@ -1064,13 +1094,13 @@
       '<div class="donut-center"><span class="donut-total money">' + esc(fmtShort(total)) + '</span><span class="donut-cap">всього</span></div></div>' +
       '<div class="legend">' + entries.map(function (e) {
         return '<div class="legend-row" data-cat="' + esc(e.cat) + '"><span class="cat-dot" style="background:' + colorFor("expense", e.cat) + '"></span>' +
-          '<span class="legend-cat">' + esc(e.cat) + '</span><span class="legend-amt">' + esc(fmtShort(e.amt)) + '</span>' +
+          '<span class="legend-cat">' + esc(expenseLabel(e.cat)) + '</span><span class="legend-amt">' + esc(fmtShort(e.amt)) + '</span>' +
           '<span class="legend-pct">' + Math.round((e.amt / total) * 100) + '%</span></div>';
       }).join("") + '</div>';
     donutDrawn = true;
     wrap.querySelectorAll(".donut-seg").forEach(function (seg) {
       seg.addEventListener("mousemove", function (ev) {
-        tip.innerHTML = '<strong>' + esc(seg.dataset.cat) + '</strong><br>' + esc(fmtShort(Number(seg.dataset.amt))) + ' · ' + esc(seg.dataset.pct) + '%';
+        tip.innerHTML = '<strong>' + esc(expenseLabel(seg.dataset.cat)) + '</strong><br>' + esc(fmtShort(Number(seg.dataset.amt))) + ' · ' + esc(seg.dataset.pct) + '%';
         tip.style.left = ev.clientX + "px"; tip.style.top = (ev.clientY - 8) + "px";
         tip.classList.add("show");
       });
@@ -1190,7 +1220,7 @@
       var cls = isIncome(t) ? "amt-pos" : "amt-neg";
       tr.innerHTML =
         '<td class="date">' + esc(d.toLocaleDateString("uk-UA", { day: "2-digit", month: "2-digit" })) + '</td>' +
-        '<td><div class="row-cat"><span class="cat-dot" style="background:' + color + '"></span>' + esc(t.category) +
+        '<td><div class="row-cat"><span class="cat-dot" style="background:' + color + '"></span>' + esc(expenseLabel(t.category)) +
         (t.recKey ? ' <span class="rec-flag">рег.</span>' : '') + '</div></td>' +
         '<td class="row-wallet">' + wal + '</td>' +
         '<td class="row-note">' + esc(t.note) + '</td>' +
@@ -1394,18 +1424,69 @@
     var rows = expenseCats();
     wrap.innerHTML = rows.map(function (row, index) {
       return '<div class="expense-cat-row" data-cat-index="' + index + '">' +
+        '<div class="expense-cat-head">' +
         '<span class="cat-dot expense-cat-dot" style="background:' + esc(row.color) + '"></span>' +
+        '<button class="expense-icon-btn" type="button" data-toggle-expense-icon="' + index + '" aria-label="Іконка категорії">' + esc(row.icon || "🙂") + '</button>' +
         '<input type="text" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
         '<input type="color" data-cat-color value="' + esc(row.color) + '" aria-label="Колір категорії" />' +
         '<button class="btn" type="button" data-save-expense-cat="' + index + '">Оновити</button>' +
         '<button class="icon-btn" type="button" data-del-expense-cat="' + esc(row.name) + '" aria-label="Видалити категорію">✕</button>' +
+        '</div>' +
+        '<div class="expense-icon-editor" hidden>' +
+        '<input type="text" data-cat-icon value="' + esc(row.icon || "") + '" maxlength="8" placeholder="🙂" aria-label="Емодзі категорії" />' +
+        '<div class="expense-icon-picks">' + EXPENSE_ICON_PRESETS.map(function (icon) {
+          return '<button class="icon-chip" type="button" data-pick-expense-icon="' + esc(icon) + '">' + esc(icon) + '</button>';
+        }).join("") + '</div>' +
+        '</div>' +
         '</div>';
     }).join("");
     wrap.querySelectorAll("[data-save-expense-cat]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var row = btn.closest(".expense-cat-row");
         if (!row) return;
-        saveExpenseCategoryEdit(Number(btn.dataset.saveExpenseCat), row.querySelector("[data-cat-name]").value, row.querySelector("[data-cat-color]").value);
+        saveExpenseCategoryEdit(
+          Number(btn.dataset.saveExpenseCat),
+          row.querySelector("[data-cat-name]").value,
+          row.querySelector("[data-cat-color]").value,
+          row.querySelector("[data-cat-icon]").value
+        );
+      });
+    });
+    wrap.querySelectorAll("[data-toggle-expense-icon]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest(".expense-cat-row");
+        if (!row) return;
+        var editor = row.querySelector(".expense-icon-editor");
+        if (!editor) return;
+        editor.hidden = !editor.hidden;
+        if (!editor.hidden) row.querySelector("[data-cat-icon]").focus();
+      });
+    });
+    wrap.querySelectorAll("[data-cat-icon]").forEach(function (input) {
+      input.addEventListener("change", function () {
+        var row = input.closest(".expense-cat-row");
+        if (!row) return;
+        saveExpenseCategoryEdit(
+          Number(row.dataset.catIndex),
+          row.querySelector("[data-cat-name]").value,
+          row.querySelector("[data-cat-color]").value,
+          input.value
+        );
+      });
+    });
+    wrap.querySelectorAll("[data-pick-expense-icon]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest(".expense-cat-row");
+        if (!row) return;
+        var input = row.querySelector("[data-cat-icon]");
+        if (!input) return;
+        input.value = btn.dataset.pickExpenseIcon;
+        saveExpenseCategoryEdit(
+          Number(row.dataset.catIndex),
+          row.querySelector("[data-cat-name]").value,
+          row.querySelector("[data-cat-color]").value,
+          input.value
+        );
       });
     });
     wrap.querySelectorAll("[data-del-expense-cat]").forEach(function (btn) {
@@ -1472,7 +1553,7 @@
       }).join("");
     }
     var expenseNote = document.getElementById("expenseCategoryNote");
-    if (expenseNote) expenseNote.textContent = expenseCatNames().length + " категорій · кольори одразу йдуть у журнал, ліміти та аналітику";
+    if (expenseNote) expenseNote.textContent = expenseCatNames().length + " категорій · іконки й кольори одразу йдуть у журнал, ліміти та аналітику";
     renderExpenseCategorySettings();
   }
 
@@ -1571,6 +1652,8 @@
     if (cm) cm.checked = !!s.calmMode;
     var ps = document.getElementById("pinSet");
     if (ps && document.activeElement !== ps) ps.value = s.pin ? "••••" : "";
+    var catIcon = document.querySelector('#expenseCategoryForm input[name="icon"]');
+    if (catIcon && document.activeElement !== catIcon) catIcon.value = "";
     var catColor = document.querySelector('#expenseCategoryForm input[name="color"]');
     if (catColor && document.activeElement !== catColor) {
       catColor.value = DEFAULT_EXPENSE_CATEGORY_ROWS[expenseCats().length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color;
@@ -2149,7 +2232,7 @@
     Promise.all(jobs).catch(function (e) { reportFailure("категорії", e); });
   }
 
-  function saveExpenseCategoryEdit(index, rawName, rawColor) {
+  function saveExpenseCategoryEdit(index, rawName, rawColor, rawIcon) {
     var rows = expenseCats().slice();
     var current = rows[index];
     if (!current) return;
@@ -2160,7 +2243,7 @@
     });
     if (duplicate) { showError("категорії", "Така категорія вже є."); return; }
     var nextColor = normalizeExpenseCategoryColor(rawColor, current.color);
-    rows[index] = { name: nextName, color: nextColor };
+    rows[index] = { name: nextName, color: nextColor, icon: normalizeExpenseCategoryIcon(rawIcon) };
     var budgets = Object.assign({}, settings().budgets);
     if (nextName !== current.name && Object.prototype.hasOwnProperty.call(budgets, current.name)) {
       budgets[nextName] = budgets[current.name];
@@ -2186,13 +2269,17 @@
     renderAll();
   }
 
-  function addExpenseCategory(rawName, rawColor) {
+  function addExpenseCategory(rawName, rawColor, rawIcon) {
     var name = normalizeExpenseCategoryName(rawName);
     if (!name) { showError("категорії", "Введи назву для нової категорії."); return false; }
     var rows = expenseCats().slice();
     var duplicate = rows.some(function (row) { return row.name.toLocaleLowerCase("uk-UA") === name.toLocaleLowerCase("uk-UA"); });
     if (duplicate) { showError("категорії", "Така категорія вже є."); return false; }
-    rows.push({ name: name, color: normalizeExpenseCategoryColor(rawColor, DEFAULT_EXPENSE_CATEGORY_ROWS[rows.length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color) });
+    rows.push({
+      name: name,
+      color: normalizeExpenseCategoryColor(rawColor, DEFAULT_EXPENSE_CATEGORY_ROWS[rows.length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color),
+      icon: normalizeExpenseCategoryIcon(rawIcon)
+    });
     saveSettings({ expenseCategories: rows });
     renderAll();
     return true;
@@ -2212,7 +2299,8 @@
       known[key] = true;
       missing.push({
         name: name,
-        color: DEFAULT_EXPENSE_CATEGORY_ROWS[(rows.length + missing.length) % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color
+        color: DEFAULT_EXPENSE_CATEGORY_ROWS[(rows.length + missing.length) % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color,
+        icon: ""
       });
     }
     Object.keys(settings().budgets || {}).forEach(push);
@@ -2424,7 +2512,7 @@
       expenseCategoryForm.addEventListener("submit", function (ev) {
         ev.preventDefault();
         var fd = new FormData(ev.target);
-        if (addExpenseCategory(fd.get("name"), fd.get("color"))) ev.target.reset();
+        if (addExpenseCategory(fd.get("name"), fd.get("color"), fd.get("icon"))) ev.target.reset();
         var color = expenseCategoryForm.querySelector('input[name="color"]');
         if (color) color.value = DEFAULT_EXPENSE_CATEGORY_ROWS[expenseCats().length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color;
       });
