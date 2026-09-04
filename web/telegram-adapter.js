@@ -67,15 +67,31 @@
     } catch (e) {}
   }
 
+  function applyViewportHeight(value) {
+    value = Number(value || 0);
+    if (!(value > 0)) return;
+    document.documentElement.style.setProperty("--tg-viewport-height", value + "px");
+    document.documentElement.style.setProperty("--tg-viewport-stable-height", value + "px");
+  }
+
+  function syncViewportHeight(forceLive) {
+    if (!tg) return;
+    var stable = Number(tg.viewportStableHeight || 0);
+    var live = Number(tg.viewportHeight || 0);
+    applyViewportHeight(stable || (forceLive ? live : 0) || window.innerHeight);
+  }
+
   function bootTelegram() {
     if (!tg) return;
     try {
       tg.ready();
       tg.expand();
       applyTelegramTheme();
+      syncViewportHeight(true);
       if (tg.onEvent) tg.onEvent("themeChanged", applyTelegramTheme);
-      if (tg.onEvent) tg.onEvent("viewportChanged", function () {
-        document.documentElement.style.setProperty("--tg-viewport-height", (tg.viewportHeight || window.innerHeight) + "px");
+      if (tg.onEvent) tg.onEvent("viewportChanged", function (event) {
+        if (event && event.isStateStable === false) return;
+        syncViewportHeight(false);
       });
     } catch (e) { console.warn("Telegram WebApp init failed", e); }
     window.KOPIYKA_TELEGRAM = { webApp: tg, user: tg.initDataUnsafe && tg.initDataUnsafe.user };

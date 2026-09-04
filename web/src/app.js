@@ -120,6 +120,30 @@
     var d = new Date(iso + "T00:00:00");
     return (d.getDay() + 6) % 7;
   }
+  function activeEditableElement() {
+    var el = document.activeElement;
+    if (!el) return null;
+    var tag = String(el.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) return el;
+    return null;
+  }
+  function blurActiveEditable() {
+    var el = activeEditableElement();
+    if (!el) return;
+    try { el.blur(); } catch (e) {}
+  }
+  function isTouchLikeDevice() {
+    try {
+      if (window.matchMedia("(pointer: coarse)").matches) return true;
+      if (window.matchMedia("(hover: none)").matches) return true;
+    } catch (e) {}
+    return !!(("ontouchstart" in window) || (navigator && navigator.maxTouchPoints > 0));
+  }
+  function shouldAutoFocusAmount() {
+    if (isTouchLikeDevice()) return false;
+    if (window.KOPIYKA_TELEGRAM && window.KOPIYKA_TELEGRAM.webApp) return false;
+    return true;
+  }
   function monthStart(mk) { return mk + "-01"; }
   function weekStart(iso) { return isoAdd(iso, -weekdayIndex(iso)); }
   function weekEnd(iso) { return isoAdd(iso, 6 - weekdayIndex(iso)); }
@@ -313,6 +337,7 @@
   function confirmBox(text) {
     return new Promise(function (resolve) {
       var back = document.getElementById("confirmBack");
+      blurActiveEditable();
       document.getElementById("confirmText").textContent = text;
       back.hidden = false;
       function done(v) {
@@ -1701,27 +1726,57 @@
     var mk = monthKey(todayISO());
     var today = todayISO();
     var payments = Array.isArray(s.salaryPayments) ? s.salaryPayments.slice() : [];
-    var jobs = [];
+    var pending = [];
     salaryDaysForMonth(mk).forEach(function (day) {
       var date = mk + "-" + pad(day);
       if (date > today || payments.some(function (p) { return p.date === date; })) return;
-      jobs.push(confirmBox("Чи відбулося надходження ЗП " + date.split("-").reverse().join(".") + "?"));
-    });
-    if (!jobs.length) return;
-    Promise.all(jobs).then(function (answers) {
-      var index = 0;
-      salaryDaysForMonth(mk).forEach(function (day) {
-        var date = mk + "-" + pad(day);
-        if (date > today || payments.some(function (p) { return p.date === date; })) return;
-        var yes = answers[index++];
-        var amount = yes ? Number(window.prompt("Вкажи фактичну суму надходження", String(round2(s.salaryAmount / s.salaryDays.length))).replace(",", ".")) : 0;
-        if (yes && amount > 0) {
-          jobs.push(commitTx({ type: "income", category: "ЗП", amount: round2(amount), wallet: "Кеш", date: date, note: "ЗП за " + date }, "salary." + date, true));
-        }
-        payments.push({ date: date, expected: round2(s.salaryAmount / s.salaryDays.length), actual: yes && amount > 0 ? round2(amount) : 0 });
+      pending.push({
+        date: date,
+        expected: round2(s.salaryAmount / s.salaryDays.length)
       });
+    });
+    if (!pending.length) return;
+
+    function promptSalaryAmount(expected) {
+      while (true) {
+        var raw = window.prompt("Вкажи фактичну суму надходження", String(expected).replace(".", ","));
+        if (raw == null) return null;
+        var parsed = parseAmount(raw);
+        if (parsed.ok) return parsed.value;
+        showError("Місячний план", parsed.msg);
+      }
+    }
+
+    var writes = [];
+    pending.reduce(function (chain, item) {
+      return chain.then(function () {
+        return confirmBox("Чи відбулося надходження ЗП " + item.date.split("-").reverse().join(".") + "?");
+      }).then(function (yes) {
+        if (!yes) {
+          payments.push({ date: item.date, expected: item.expected, actual: 0 });
+          return;
+        }
+        var amount = promptSalaryAmount(item.expected);
+        if (amount == null) return;
+        amount = round2(amount);
+        payments.push({ date: item.date, expected: item.expected, actual: amount });
+        writes.push(commitTx({
+          type: "income",
+          category: "ЗП",
+          amount: amount,
+          wallet: "Кеш",
+          date: item.date,
+          note: "ЗП за " + item.date
+        }, "salary." + item.date, true));
+      });
+    }, Promise.resolve()).then(function () {
       saveSettings({ salaryPayments: payments });
-      Promise.all(jobs).then(function () { renderAll(); });
+      return Promise.all(writes);
+    }).then(function () {
+      renderAll();
+    }).catch(function (e) {
+      console.error("[Копійка] зарплатний план:", e);
+      showError("Місячний план", "Не вдалось завершити перевірку виплат.");
     });
   }
 
@@ -2216,7 +2271,7 @@
       form.querySelector('input[name="amount"]').value = "";
       form.querySelector('input[name="note"]').value = "";
       if (reserveInput) reserveInput.checked = false;
-      form.querySelector('input[name="amount"]').focus();
+      focusAmount();
     });
 
     document.getElementById("repeatLast").addEventListener("click", repeatLast);
@@ -2520,7 +2575,9 @@
   // Форма готова до вводу одразу: курсор у сумі, на телефоні — цифрова
   // клавіатура (inputmode="decimal"). Замок має пріоритет над фокусом.
   function focusAmount() {
+    if (!shouldAutoFocusAmount()) return;
     if (!document.getElementById("pinGate").hidden) return;
+    if (!document.getElementById("confirmBack").hidden) return;
     if (document.activeElement && document.activeElement.tagName === "INPUT") return;
     var el = document.querySelector('#txForm input[name="amount"]');
     if (el) try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
