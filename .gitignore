@@ -1,4 +1,13 @@
 server/.env
+/.env
+/.env.local
+node_modules/
+.pgdata/
+.pgdata-sandbox-failed/
+.pg-local.log
+.postgresql-17.11-binaries.zip
+.postgresql-bin/
+server/data/*.backup-*
 server/data/users.json
 server/data/*.tmp-*
 web/src/kopiyka.html

@@ -186,12 +186,18 @@
       };
     }
 
-    return {
-      offline: false,
-      collection: collection,
-      doc: function (path) {
-        if (path !== "settings/main") throw new Error("Unknown document: " + path);
-        return {
+      return {
+        offline: false,
+        collection: collection,
+        exportAll: function () {
+          return request("/api/export", { method: "GET" });
+        },
+        deleteAccount: function (payload) {
+          return request("/api/account", { method: "DELETE", body: JSON.stringify(payload || {}) }).then(afterWrite);
+        },
+        doc: function (path) {
+          if (path !== "settings/main") throw new Error("Unknown document: " + path);
+          return {
           onSnapshot: listenSettings,
           set: function (settings) { return request("/api/settings", { method: "PUT", body: JSON.stringify(settings) }).then(afterWrite); }
         };

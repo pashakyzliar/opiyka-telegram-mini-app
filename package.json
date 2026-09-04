@@ -4,9 +4,18 @@
   "private": true,
   "description": "Копійка — Telegram Mini App для особистих фінансів",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "test": "node --test --test-concurrency=1 server/test/*.test.js",
+    "db:migrate": "node ./node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations up",
+    "db:rollback": "node ./node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations down -1",
+    "db:import-json": "node server/import-json.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "@tma.js/init-data-node": "^2.0.8",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.0"
   }
 }

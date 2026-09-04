@@ -365,10 +365,10 @@
     function persist() { try { localStorage.setItem(LS_KEY, JSON.stringify(data)); } catch (e) {} }
     function fire(c) { if (subs[c]) subs[c](data[c].slice()); }
     function fireSettings() { if (subs.settings) subs.settings(Object.assign({}, data.settings)); }
-    return {
-      offline: true,
-      subscribe: function (c, cb) { subs[c] = cb; cb(data[c].slice()); },
-      subscribeSettings: function (cb) { subs.settings = cb; cb(Object.assign({}, data.settings)); },
+      return {
+        offline: true,
+        subscribe: function (c, cb) { subs[c] = cb; cb(data[c].slice()); },
+        subscribeSettings: function (cb) { subs.settings = cb; cb(Object.assign({}, data.settings)); },
       add: function (c, obj, forcedId) {
         var o = Object.assign({}, obj);
         o.id = forcedId || uid();
@@ -393,14 +393,25 @@
         persist(); fireSettings();
         return Promise.resolve();
       },
-      replaceAll: function (payload) {
-        COLLECTIONS.forEach(function (c) { data[c] = Array.isArray(payload[c]) ? payload[c].slice() : []; });
-        data.settings = Object.assign(defaultSettings(), payload.settings || {});
-        persist(); COLLECTIONS.forEach(fire); fireSettings();
-        return Promise.resolve();
-      }
-    };
-  }
+        replaceAll: function (payload) {
+          COLLECTIONS.forEach(function (c) { data[c] = Array.isArray(payload[c]) ? payload[c].slice() : []; });
+          data.settings = Object.assign(defaultSettings(), payload.settings || {});
+          persist(); COLLECTIONS.forEach(fire); fireSettings();
+          return Promise.resolve();
+        },
+        exportAll: function () {
+          var out = { app: "kopiyka", version: 5, exportedAt: new Date().toISOString(), settings: Object.assign({}, data.settings) };
+          COLLECTIONS.forEach(function (c) { out[c] = data[c].slice(); });
+          return Promise.resolve(out);
+        },
+        deleteAccount: function () {
+          COLLECTIONS.forEach(function (c) { data[c] = []; });
+          data.settings = defaultSettings();
+          persist(); COLLECTIONS.forEach(fire); fireSettings();
+          return Promise.resolve({ ok: true });
+        }
+      };
+    }
 
   // onSnapshot's error callback fires at most once and the listener is dead
   // after it, so a swallowed error froze the whole screen. Resubscribe and say
@@ -438,9 +449,9 @@
         return o;
       });
     }
-    return {
-      offline: false,
-      subscribe: function (c, cb, onDown) {
+      return {
+        offline: false,
+        subscribe: function (c, cb, onDown) {
         // No orderBy here: the store sorts in memory. An orderBy would drop
         // every document missing that field, and a limit would silently cut
         // history once the journal outgrows it.
@@ -462,10 +473,12 @@
         return db.collection(c).add(o).then(function (ref) { return ref.id; });
       },
       update: function (c, id, patch) { return db.collection(c).doc(id).update(patch); },
-      remove: function (c, id) { return db.collection(c).doc(id).delete(); },
-      saveSettings: function (s) {
-        settingsCache = Object.assign({}, settingsCache, s);
-        return db.doc("settings/main").set(settingsCache);
+        remove: function (c, id) { return db.collection(c).doc(id).delete(); },
+        exportAll: function () { return db.exportAll(); },
+        deleteAccount: function (payload) { return db.deleteAccount(payload); },
+        saveSettings: function (s) {
+          settingsCache = Object.assign({}, settingsCache, s);
+          return db.doc("settings/main").set(settingsCache);
       },
       replaceAll: function (payload) {
         var jobs = [];
@@ -1823,7 +1836,7 @@
   /* ============================ backup / export ============================ */
 
   function snapshotPayload() {
-    var out = { app: "kopiyka", version: 4, exportedAt: new Date().toISOString(), settings: settings() };
+    var out = { app: "kopiyka", version: 5, exportedAt: new Date().toISOString(), settings: settings() };
     COLLECTIONS.forEach(function (c) { out[c] = state[c]; });
     return out;
   }
@@ -1843,7 +1856,13 @@
   }
 
   function doBackup() {
-    return saveFile("kopiyka-" + todayISO() + ".json", JSON.stringify(snapshotPayload(), null, 2));
+    var source = store && store.exportAll ? Promise.resolve(store.exportAll()) : Promise.resolve(snapshotPayload());
+    return source.then(function (payload) {
+      return saveFile("kopiyka-" + todayISO() + ".json", JSON.stringify(payload, null, 2));
+    }).catch(function (e) {
+      reportFailure("копія", e);
+      return false;
+    });
   }
 
   function doCsv() {
@@ -1882,6 +1901,30 @@
     };
     reader.onerror = function () { showError("відновлення", "Не вдалось прочитати файл."); };
     reader.readAsText(file);
+  }
+
+  function requestAccountDeletion() {
+    if (!store || !store.deleteAccount) {
+      showError("акаунт", "Видалення недоступне без підключеного сховища.");
+      return;
+    }
+    confirmBox("Видалити акаунт і всі пов'язані дані без можливості відновлення?").then(function (ok) {
+      if (!ok) return;
+      var phrase = window.prompt('Щоб підтвердити, введи DELETE');
+      if (phrase !== "DELETE") {
+        showError("акаунт", "Підтвердження не збіглося. Видалення скасовано.");
+        return;
+      }
+      return confirmBox("Останнє підтвердження: точно видалити акаунт?").then(function (again) {
+        if (!again) return;
+        return Promise.resolve(store.deleteAccount({ confirm: "DELETE", confirmAgain: "DELETE" })).then(function () {
+          try { localStorage.removeItem(LS_KEY); } catch (e) {}
+          try { sessionStorage.removeItem("kopiyka_unlocked"); } catch (e) {}
+          showError("акаунт", "Акаунт видалено.");
+          setTimeout(function () { window.location.reload(); }, 500);
+        }).catch(function (e) { reportFailure("акаунт", e); });
+      });
+    });
   }
 
   function maybeNudge() {
@@ -2447,8 +2490,10 @@
     });
 
     document.getElementById("btnBackup").addEventListener("click", doBackup);
+    document.getElementById("btnExportAccount").addEventListener("click", doBackup);
     document.getElementById("btnCsv").addEventListener("click", doCsv);
     document.getElementById("btnRestore").addEventListener("click", function () { document.getElementById("restoreFile").click(); });
+    document.getElementById("btnDeleteAccount").addEventListener("click", requestAccountDeletion);
     document.getElementById("restoreFile").addEventListener("change", function () {
       if (this.files && this.files[0]) doRestore(this.files[0]);
       this.value = "";
