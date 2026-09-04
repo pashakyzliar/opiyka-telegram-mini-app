@@ -25,7 +25,20 @@ function sanitizeAccountPayload(payload) {
   return payload;
 }
 
+function stalePendingIds(state) {
+  const now = Date.now();
+  return (state.transactions || [])
+    .filter((row) => row && row.pending && row.createdAt && now - Date.parse(row.createdAt) > 24 * 60 * 60 * 1000)
+    .map((row) => row.id);
+}
+
 async function getState(client, userId) {
+  const state = await repository.getAccountState(client, userId);
+  const staleIds = stalePendingIds(state);
+  if (!staleIds.length) return state;
+  for (const id of staleIds) {
+    await repository.deleteCollectionRow(client, userId, "transactions", id);
+  }
   return repository.getAccountState(client, userId);
 }
 

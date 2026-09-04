@@ -3,6 +3,9 @@
 const EXPENSE_CATS = ["Машина", "Пайка", "Хавка", "Дурка", "Продукти", "Сіги", "Подпіски"];
 const INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
 const WALLETS = ["Кеш"];
+const MONEY_WORDS = ["грн", "гривня", "гривні", "гривень", "uah", "usd", "eur"];
+const DATE_WORDS = ["сьогодні", "вчора", "позавчора", "завтра"];
+const NOTE_STOP_WORDS = ["я", "ми", "запиши", "додай", "додав", "додала", "витратив", "витратила", "дохід", "доход", "витрата", "витрати", "купив", "купила"];
 
 function pad(n) {
   return n < 10 ? "0" + n : String(n);
@@ -25,6 +28,13 @@ function daysInMonth(year, month) {
 
 function escapeRegex(text) {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeHtml(text) {
+  return String(text == null ? "" : text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 function stripWords(text, words) {
@@ -58,23 +68,79 @@ function noteFromUserText(text) {
     .replace(/\d+(?:[\s.,]\d+)*/g, " ")
     .replace(/[₴$€]/g, " ")
     .replace(/[.,;:+\-–—()[\]{}\\/]+/g, " ");
-  value = stripWords(value, ["грн", "гривня", "гривні", "гривень", "uah", "usd", "eur"]);
-  value = stripWords(value, ["сьогодні", "вчора", "позавчора", "завтра"]);
-  value = stripWords(value, ["я", "ми", "запиши", "додай", "додав", "додала", "витратив", "витратила", "дохід", "доход", "витрата", "витрати", "купив", "купила"]);
+  value = stripWords(value, MONEY_WORDS);
+  value = stripWords(value, DATE_WORDS);
+  value = stripWords(value, NOTE_STOP_WORDS);
   return value.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
-function buildWritePrompt(text) {
+function expenseCategoryRows(list) {
+  const source = Array.isArray(list) ? list : [];
+  const rows = source
+    .map((row) => row && typeof row === "object" ? row : { name: String(row || "") })
+    .filter((row) => row && String(row.name || "").trim());
+  if (rows.length) return rows;
+  return EXPENSE_CATS.map((name) => ({ name, icon: "" }));
+}
+
+function expenseCategoryNames(list) {
+  return expenseCategoryRows(list).map((row) => row.name);
+}
+
+function normalizeLower(text) {
+  return String(text || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("uk-UA");
+}
+
+function normalizeWord(word) {
+  let value = String(word || "").toLocaleLowerCase("uk-UA").replace(/[^\p{L}]+/gu, "");
+  if (value.length > 4) value = value.slice(0, -1);
+  return value;
+}
+
+function sourceWords(text) {
+  return noteFromUserText(text).split(/\s+/).map((word) => String(word || "").trim()).filter(Boolean);
+}
+
+function sourceWord(text) {
+  return sourceWords(text)[0] || "";
+}
+
+function resolveGlossaryWrite(text, glossary, expenseCategories) {
+  const numbers = String(text || "").match(/\d+(?:[\s.,]\d+)*/g) || [];
+  if (numbers.length !== 1) return null;
+  const amount = parseAmount(numbers[0]);
+  if (amount == null) return null;
+  const words = sourceWords(text);
+  if (words.length !== 1) return null;
+  const rawWord = words[0];
+  const key = normalizeWord(rawWord);
+  if (!key) return null;
+  const category = glossary && typeof glossary === "object" ? glossary[key] : "";
+  if (!expenseCategoryNames(expenseCategories).includes(category)) return null;
+  return {
+    type: "expense",
+    category,
+    amount,
+    wallet: WALLETS[0],
+    date: todayISO(),
+    note: noteFromUserText(text),
+    srcWord: rawWord
+  };
+}
+
+function buildWritePrompt(text, expenseCategories) {
   const today = todayISO();
   return [
     "Ти розбираєш український текст про особисті фінанси на окремі операції.",
     "Сьогодні: " + today + ".",
-    "Статті витрат: " + EXPENSE_CATS.join(", ") + ".",
+    "Статті витрат: " + expenseCategoryNames(expenseCategories).join(", ") + ".",
     "Статті доходу: " + INCOME_CATS.join(", ") + ".",
     "Гаманці: " + WALLETS.join(", ") + ".",
-    "Поверни ТІЛЬКИ JSON-масив об'єктів виду " +
-      '{"type":"expense"|"income","category":"...","amount":123.45,"wallet":"Кеш","date":"YYYY-MM-DD","note":"..."}' + ".",
+    "Поверни ТІЛЬКИ JSON-об'єкт виду " +
+      "{\"operations\":[{\"type\":\"expense\"|\"income\",\"category\":\"...\",\"amount\":123.45,\"wallet\":\"Кеш\",\"date\":\"YYYY-MM-DD\",\"note\":\"...\"}]}.",
     "Категорію обирай лише зі списків вище.",
+    "Якщо жодна категорія витрат зі списку не підходить упевнено, повертай \"category\": null і не вгадуй.",
+    "Приклад: \"150 грн стіки\" → {\"operations\":[{\"amount\":150,\"category\":null,\"note\":\"стіки\"}]}.",
     "Якщо гаманець не вказано, став \"Кеш\".",
     "Відносні дати переводь у конкретні YYYY-MM-DD. Якщо дата не вказана, став сьогодні.",
     "Поле note заповнюй короткою назвою покупки або сервісу без суми й без валюти.",
@@ -83,13 +149,13 @@ function buildWritePrompt(text) {
   ].join("\n");
 }
 
-function buildAskPrompt(question) {
+function buildAskPrompt(question, expenseCategories) {
   return [
     "Користувач питає про свої фінанси. Поверни ТІЛЬКИ JSON-фільтр, не рахуй сам.",
     "Сьогодні: " + todayISO() + ".",
-    "Статті витрат: " + EXPENSE_CATS.join(", ") + ".",
+    "Статті витрат: " + expenseCategoryNames(expenseCategories).join(", ") + ".",
     "Статті доходу: " + INCOME_CATS.join(", ") + ".",
-    'Формат: {"categories":["..."],"type":"expense"|"income"|null,"from":"YYYY-MM-DD","to":"YYYY-MM-DD","title":"короткий підпис"}',
+    "{\"categories\":[\"...\"],\"type\":\"expense\"|\"income\"|null,\"from\":\"YYYY-MM-DD\",\"to\":\"YYYY-MM-DD\",\"title\":\"короткий підпис\"}",
     "Порожній масив categories означає всі категорії.",
     "Якщо період не названо, став останні 12 місяців.",
     "",
@@ -97,25 +163,29 @@ function buildAskPrompt(question) {
   ].join("\n");
 }
 
-function normalizeDraft(row) {
+function normalizeDraft(row, expenseCategories) {
   if (!row || typeof row !== "object") return null;
   const amount = parseAmount(row.amount);
   if (amount == null) return null;
   const type = row.type === "income" ? "income" : "expense";
-  const categories = type === "income" ? INCOME_CATS : EXPENSE_CATS;
-  const category = categories.includes(row.category) ? row.category : categories[0];
+  const categories = type === "income" ? INCOME_CATS : expenseCategoryNames(expenseCategories);
   const wallet = WALLETS.includes(row.wallet) ? row.wallet : WALLETS[0];
   const date = isIsoDate(row.date) ? String(row.date) : todayISO();
   const note = String(row.note || "").trim().slice(0, 120);
-  return { type, category, amount, wallet, date, note };
+  if (!categories.includes(row.category)) {
+    if (type === "expense") return { type, category: null, amount, wallet, date, note, needsCategory: true };
+    return { type, category: categories[0], amount, wallet, date, note, needsCategory: false };
+  }
+  return { type, category: row.category, amount, wallet, date, note, needsCategory: false };
 }
 
-function normalizeFilter(value) {
+function normalizeFilter(value, expenseCategories) {
   const today = todayISO();
   const fallbackFrom = isoAdd(today, -365);
   const result = value && typeof value === "object" ? value : {};
+  const allowedExpense = expenseCategoryNames(expenseCategories);
   const categories = Array.isArray(result.categories)
-    ? result.categories.filter((cat) => EXPENSE_CATS.includes(cat) || INCOME_CATS.includes(cat))
+    ? result.categories.filter((cat) => allowedExpense.includes(cat) || INCOME_CATS.includes(cat))
     : [];
   const type = result.type === "expense" || result.type === "income" ? result.type : null;
   const from = isIsoDate(result.from) ? String(result.from) : fallbackFrom;
@@ -127,7 +197,7 @@ function normalizeFilter(value) {
 function filterTransactions(transactions, filter) {
   const list = Array.isArray(transactions) ? transactions : [];
   return list.filter((row) => {
-    if (!row || !isIsoDate(row.date)) return false;
+    if (!row || row.pending || !isIsoDate(row.date)) return false;
     if (row.type !== "expense" && row.type !== "income") return false;
     if (filter.type && row.type !== filter.type) return false;
     if (filter.categories.length && !filter.categories.includes(row.category)) return false;
@@ -155,20 +225,86 @@ function formatDateRange(from, to) {
   return from || to || "";
 }
 
-function formatWriteReply(rows) {
+function bar(pct) {
+  const safe = Math.max(0, Number(pct) || 0);
+  const filled = Math.min(10, Math.round((safe / 100) * 10));
+  return "▰".repeat(filled) + "▱".repeat(10 - filled);
+}
+
+function indicator(pct) {
+  const safe = Number(pct) || 0;
+  if (safe >= 100) return "🔴";
+  if (safe >= 80) return "🟠";
+  return "🟢";
+}
+
+function categoryEmoji(name, type, expenseCategories) {
+  if (type !== "expense") return "";
+  const row = expenseCategoryRows(expenseCategories).find((item) => item.name === name);
+  return row && row.icon ? row.icon : "";
+}
+
+function formatNote(note, category) {
+  const clean = String(note || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  if (normalizeLower(clean) === normalizeLower(category)) return "";
+  return escapeHtml(clean);
+}
+
+function formatCategoryLabel(row, expenseCategories) {
+  const icon = categoryEmoji(row.category, row.type, expenseCategories);
+  const name = row.category || "Без категорії";
+  return escapeHtml(icon ? icon + " " + name : name);
+}
+
+function formatAllowanceBlock(info, show) {
+  if (!info || !show) return "";
+  const safeLimit = Math.max(0, Number(info.todayLimit) || 0);
+  const spentToday = Number(info.spentToday) || 0;
+  const todayAvailable = Number(info.todayAvailable) || 0;
+  const overBy = Math.max(0, Number(info.overBy) || 0);
+  const pct = safeLimit > 0 ? (spentToday / safeLimit) * 100 : 100;
+  const marker = indicator(pct);
+  if (!info.enabled || !info.configured) {
+    return "\nСьогодні: <b>" + escapeHtml(formatMoney(spentToday)) + "</b>";
+  }
+  if (todayAvailable < 0 || pct >= 100) {
+    return "\nСьогодні: <b>" + escapeHtml(formatMoney(spentToday)) + "</b>" +
+      "\nПеревитрата <b>" + escapeHtml(formatMoney(overBy)) + "</b>";
+  }
+  return "\nСьогодні: <b>" + escapeHtml(formatMoney(spentToday)) + "</b>" +
+    " · лишилось <b>" + escapeHtml(formatMoney(todayAvailable)) + "</b>" +
+    "\n<code>" + marker + " " + bar(pct) + "  " + Math.round(pct) + "%</code>";
+}
+
+function formatWriteReply(rows, allowanceInfo) {
   if (!rows.length) return "Не зміг розібрати запис. Спробуй написати щось на кшталт: 180 грн Glovo";
+  const today = todayISO();
+  const expenseCategories = allowanceInfo && allowanceInfo.expenseCategories;
+  const showAllowance = rows.some((row) => row.type === "expense" && row.date === today && !row.pending);
   if (rows.length === 1) {
     const row = rows[0];
-    const note = row.note ? "\nНотатка: " + row.note : "";
-    return "Записав " + (row.type === "income" ? "дохід" : "витрату") +
-      ": " + formatMoney(row.amount) +
-      "\nКатегорія: " + row.category +
-      note +
-      "\nДата: " + row.date;
+    const note = formatNote(row.note, row.category);
+    const when = row.date === today ? "" : "\n<code>" + escapeHtml(row.date) + "</code>";
+    return "<b>" + escapeHtml(formatMoney(row.amount)) + "</b> — " + formatCategoryLabel(row, expenseCategories) +
+      (note ? " · " + note : "") +
+      formatAllowanceBlock(allowanceInfo, showAllowance && row.type === "expense") +
+      when;
   }
-  return "Записав " + rows.length + " операції:\n" + rows.map((row, index) => {
-    return (index + 1) + ". " + row.category + " — " + formatMoney(row.amount) + (row.note ? " — " + row.note : "");
-  }).join("\n");
+  const lines = rows.map((row, index) => {
+    const note = formatNote(row.note, row.category);
+    const when = row.date === today ? "" : " · " + row.date;
+    return (index + 1) + ". " + formatCategoryLabel(row, expenseCategories) + " — " +
+      escapeHtml(formatMoney(row.amount)) + (note ? " — " + note : "") + when;
+  });
+  const allowanceBlock = formatAllowanceBlock(allowanceInfo, showAllowance);
+  return "Записав " + rows.length + " операції:\n" + lines.join("\n") + allowanceBlock;
+}
+
+function formatPendingCategoryReply(row) {
+  return "<b>" + escapeHtml(formatMoney(row.amount)) + "</b>\n" +
+    "Не зрозумів, що таке «" + escapeHtml(row.srcWord || row.note || "") + "». Куди віднести?\n" +
+    "Запамʼятаю на майбутнє.";
 }
 
 function formatAskReply(filter, rows, total) {
@@ -214,18 +350,27 @@ module.exports = {
   EXPENSE_CATS,
   INCOME_CATS,
   WALLETS,
+  NOTE_STOP_WORDS,
   todayISO,
   isoAdd,
   noteFromUserText,
+  normalizeWord,
+  sourceWord,
+  resolveGlossaryWrite,
   buildWritePrompt,
   buildAskPrompt,
   normalizeDraft,
   normalizeFilter,
   filterTransactions,
   sumTransactions,
+  bar,
+  indicator,
+  categoryEmoji,
   formatWriteReply,
+  formatPendingCategoryReply,
   formatAskReply,
   routeBotMessage,
   helpText,
-  formatMoney
+  formatMoney,
+  daysInMonth
 };

@@ -168,6 +168,7 @@ async function askJson(prompt) {
     model: AI_MODEL,
     stream: false,
     temperature: 0,
+    response_format: { type: "json_object" },
     max_tokens: AI_MAX_TOKENS,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },

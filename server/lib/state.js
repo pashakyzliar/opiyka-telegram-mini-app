@@ -6,13 +6,13 @@ const { newId, normalizeId } = require("./ids");
 
 const COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
 const DEFAULT_EXPENSE_CATEGORIES = [
-  { name: "Машина", color: "#5aa8ba" },
-  { name: "Пайка", color: "#c08a4a" },
-  { name: "Хавка", color: "#63b06e" },
-  { name: "Дурка", color: "#b07dad" },
-  { name: "Продукти", color: "#d29a5c" },
-  { name: "Сіги", color: "#97a851" },
-  { name: "Подпіски", color: "#7d8ecb" }
+  { name: "Машина", color: "#5aa8ba", icon: "" },
+  { name: "Пайка", color: "#c08a4a", icon: "" },
+  { name: "Хавка", color: "#63b06e", icon: "" },
+  { name: "Дурка", color: "#b07dad", icon: "" },
+  { name: "Продукти", color: "#d29a5c", icon: "" },
+  { name: "Сіги", color: "#97a851", icon: "" },
+  { name: "Подпіски", color: "#7d8ecb", icon: "" }
 ];
 const DEFAULT_INCOME_CATEGORIES = ["ЗП", "Аванс", "Підробіток", "Інше"];
 const DEFAULT_WALLETS = ["Кеш"];
@@ -20,6 +20,7 @@ const DEFAULT_WALLETS = ["Кеш"];
 const SETTINGS_KEYS = new Set([
   "budgets",
   "expenseCategories",
+  "glossary",
   "salaryAmount",
   "salaryDays",
   "salaryPlanEnabled",
@@ -63,6 +64,13 @@ function normalizeOptionalName(value, fieldName, maxLen) {
 function normalizeColor(value, fallback) {
   const out = String(value || fallback || "").trim().toLowerCase();
   return /^#[0-9a-f]{6}$/.test(out) ? out : fallback;
+}
+
+function normalizeIcon(value) {
+  const text = String(value || "");
+  if (!text || typeof Intl === "undefined" || !Intl.Segmenter) return "";
+  const clusters = Array.from(new Intl.Segmenter("uk", { granularity: "grapheme" }).segment(text), (item) => item.segment);
+  return clusters.length === 1 && Buffer.byteLength(clusters[0], "utf8") <= 8 ? clusters[0] : "";
 }
 
 function normalizeDate(value, fieldName, required) {
@@ -109,6 +117,10 @@ function expenseCategoryKey(name) {
   return String(name || "").trim().toLocaleLowerCase("uk-UA");
 }
 
+function defaultExpenseRows() {
+  return DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color, icon: row.icon || "" }));
+}
+
 function normalizeExpenseCategories(list) {
   const src = Array.isArray(list) && list.length ? list : DEFAULT_EXPENSE_CATEGORIES;
   const out = [];
@@ -120,12 +132,26 @@ function normalizeExpenseCategories(list) {
     const key = expenseCategoryKey(name);
     if (seen.has(key)) return;
     seen.add(key);
+    const matched = DEFAULT_EXPENSE_CATEGORIES.find((item) => expenseCategoryKey(item.name) === key);
     out.push({
       name,
-      color: normalizeColor(row && row.color, fallback.color)
+      color: normalizeColor(row && row.color, fallback.color),
+      icon: normalizeIcon(row && row.icon) || (matched ? matched.icon || "" : "")
     });
   });
-  return out.length ? out : DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color }));
+  return out.length ? out : defaultExpenseRows();
+}
+
+function normalizeGlossary(input) {
+  if (!isPlainObject(input)) return {};
+  const out = {};
+  Object.keys(input).slice(0, 500).forEach((key) => {
+    const normalizedKey = normalizeOptionalName(key, "glossary_key", 40).toLocaleLowerCase("uk-UA");
+    const normalizedValue = normalizeOptionalName(input[key], "glossary_value", 28);
+    if (!normalizedKey || !normalizedValue) return;
+    out[normalizedKey] = normalizedValue;
+  });
+  return out;
 }
 
 function normalizeNavarHistory(list) {
@@ -149,7 +175,8 @@ function normalizeWeekDaily(list) {
 function defaultSettings() {
   return {
     budgets: {},
-    expenseCategories: DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color })),
+    expenseCategories: defaultExpenseRows(),
+    glossary: {},
     salaryAmount: 0,
     salaryDays: [5, 20],
     salaryPlanEnabled: false,
@@ -196,13 +223,13 @@ function ensureExpenseCategoriesForAccount(settings, collections) {
     const key = expenseCategoryKey(normalized);
     if (known.has(key)) return;
     const fallback = DEFAULT_EXPENSE_CATEGORIES[(known.size) % DEFAULT_EXPENSE_CATEGORIES.length];
-    const row = { name: normalized, color: fallback.color };
+    const row = { name: normalized, color: fallback.color, icon: fallback.icon || "" };
     known.set(key, row);
     rows.push(row);
   };
   Object.keys(settings.budgets || {}).forEach(addMissing);
   (collections.transactions || []).forEach((row) => {
-    if (row.type === "expense") addMissing(row.category);
+    if (row.type === "expense" && !row.pending) addMissing(row.category);
   });
   (collections.recurring || []).forEach((row) => addMissing(row.category));
   return rows;
@@ -212,6 +239,7 @@ function normalizeSettings(input, collections) {
   const current = isPlainObject(input) ? Object.assign({}, input) : {};
   const defaults = defaultSettings();
   const out = Object.assign({}, defaults, current);
+  out.glossary = normalizeGlossary(out.glossary);
   out.salaryAmount = money(out.salaryAmount || 0, "salaryAmount");
   out.salaryDays = Array.isArray(out.salaryDays) && out.salaryDays.length
     ? out.salaryDays.slice(0, 6).map((value) => normalizeInteger(value, "salaryDays", 1, 31, 5))
@@ -272,7 +300,11 @@ function normalizeTransaction(row) {
   const out = Object.assign({}, row);
   out.id = normalizeId(out.id, "t");
   out.type = ["expense", "income", "transfer"].includes(out.type) ? out.type : (() => { throw appError(400, "invalid_type", "type is invalid"); })();
-  out.category = out.type === "transfer" ? normalizeOptionalName(out.category, "category", 28) : normalizeName(out.category, "category", 28);
+  out.pending = out.type === "expense" ? normalizeBoolean(out.pending) : false;
+  out.srcWord = normalizeOptionalName(out.srcWord, "srcWord", 120);
+  if (out.type === "transfer") out.category = normalizeOptionalName(out.category, "category", 28);
+  else if (out.pending && out.type === "expense") out.category = normalizeOptionalName(out.category, "category", 28) || null;
+  else out.category = normalizeName(out.category, "category", 28);
   out.amount = money(out.amount, "amount");
   out.wallet = normalizeName(out.wallet || DEFAULT_WALLETS[0], "wallet", 32);
   out.toWallet = normalizeOptionalName(out.toWallet, "toWallet", 32);
@@ -360,7 +392,10 @@ function normalizeAccount(input) {
   const out = emptyAccount();
   const raw = isPlainObject(input) ? input : {};
   COLLECTIONS.forEach((collection) => {
-    out[collection] = (Array.isArray(raw[collection]) ? raw[collection] : []).map((row) => normalizeRow(collection, row).value);
+    out[collection] = (Array.isArray(raw[collection]) ? raw[collection] : []).map((row) => {
+      const normalized = normalizeRow(collection, row);
+      return Object.assign({}, normalized.value, normalized.extra);
+    });
   });
   const settings = normalizeSettings(raw.settings, out);
   out.settings = Object.assign({}, settings.value, settings.extra);

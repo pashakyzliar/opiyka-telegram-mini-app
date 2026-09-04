@@ -41,7 +41,7 @@ async function ensureScaffold(client, userId) {
   );
   for (let index = 0; index < DEFAULT_EXPENSE_CATEGORIES.length; index += 1) {
     const row = DEFAULT_EXPENSE_CATEGORIES[index];
-    await upsertCategory(client, userId, "expense", row.name, row.color, index);
+    await upsertCategory(client, userId, "expense", row.name, row.color, index, row.icon);
   }
   for (let index = 0; index < DEFAULT_INCOME_CATEGORIES.length; index += 1) {
     await upsertCategory(client, userId, "income", DEFAULT_INCOME_CATEGORIES[index], null, index);
@@ -63,17 +63,18 @@ async function upsertWallet(client, userId, name, sortOrder, isDefault) {
   return result.rows[0].id;
 }
 
-async function upsertCategory(client, userId, kind, name, color, sortOrder) {
+async function upsertCategory(client, userId, kind, name, color, sortOrder, icon) {
   const result = await client.query(
-    `INSERT INTO categories (user_id, kind, name, name_key, color, sort_order)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO categories (user_id, kind, name, name_key, color, sort_order, icon)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      ON CONFLICT (user_id, kind, name_key)
      DO UPDATE SET
        name = EXCLUDED.name,
        color = COALESCE(EXCLUDED.color, categories.color),
+       icon = EXCLUDED.icon,
        sort_order = EXCLUDED.sort_order
      RETURNING id`,
-    [userId, kind, name, expenseCategoryKey(name), color, sortOrder || 0]
+    [userId, kind, name, expenseCategoryKey(name), color, sortOrder || 0, icon || ""]
   );
   return result.rows[0].id;
 }
@@ -84,17 +85,21 @@ async function getWalletId(client, userId, name) {
 
 async function getCategoryId(client, userId, kind, name, sortOrder) {
   if (!name) return null;
-  const color = kind === "expense"
-    ? (DEFAULT_EXPENSE_CATEGORIES[sortOrder % DEFAULT_EXPENSE_CATEGORIES.length] || DEFAULT_EXPENSE_CATEGORIES[0]).color
+  const fallback = kind === "expense"
+    ? DEFAULT_EXPENSE_CATEGORIES.find((row) => expenseCategoryKey(row.name) === expenseCategoryKey(name))
+      || DEFAULT_EXPENSE_CATEGORIES[sortOrder % DEFAULT_EXPENSE_CATEGORIES.length]
+      || DEFAULT_EXPENSE_CATEGORIES[0]
     : null;
-  return upsertCategory(client, userId, kind, name, color, sortOrder || 0);
+  const color = fallback ? fallback.color : null;
+  const icon = fallback ? fallback.icon || "" : "";
+  return upsertCategory(client, userId, kind, name, color, sortOrder || 0, icon);
 }
 
 async function serializeSettings(client, userId) {
   await ensureScaffold(client, userId);
   const settingsRow = await client.query("SELECT * FROM user_settings WHERE user_id = $1", [userId]);
   const expenseCategories = await client.query(
-    `SELECT id, name, color, sort_order
+    `SELECT id, name, color, icon, sort_order
      FROM categories
      WHERE user_id = $1 AND kind = 'expense' AND archived_at IS NULL
      ORDER BY sort_order ASC, created_at ASC`,
@@ -147,7 +152,7 @@ async function serializeSettings(client, userId) {
   const row = settingsRow.rows[0] || {};
   const base = defaultSettings();
   const settings = Object.assign({}, base, cloneJson(row.extra_settings || {}), {
-    expenseCategories: expenseCategories.rows.map((item) => ({ name: item.name, color: item.color })),
+    expenseCategories: expenseCategories.rows.map((item) => ({ name: item.name, color: item.color, icon: item.icon || "" })),
     budgets: {},
     salaryAmount: toNumber(row.salary_amount) || 0,
     salaryDays: salaryDays.rows.length ? salaryDays.rows.map((item) => item.day_of_month) : base.salaryDays.slice(),
@@ -197,7 +202,7 @@ async function serializeTransactions(client, userId) {
   return result.rows.map((row) => Object.assign({}, cloneJson(row.extra_data || {}), {
     id: row.record_id,
     type: row.type,
-    category: row.category_name || "",
+    category: row.category_name == null ? null : row.category_name,
     amount: toNumber(row.amount) || 0,
     wallet: row.wallet_name || DEFAULT_WALLETS[0],
     toWallet: row.to_wallet_name || "",
@@ -502,7 +507,7 @@ async function replaceSettings(client, userId, settings, extraSettings) {
   );
   for (let index = 0; index < settings.expenseCategories.length; index += 1) {
     const row = settings.expenseCategories[index];
-    await upsertCategory(client, userId, "expense", row.name, row.color, index);
+    await upsertCategory(client, userId, "expense", row.name, row.color, index, row.icon);
   }
   await client.query(
     `UPDATE user_settings
