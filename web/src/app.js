@@ -942,8 +942,8 @@
       " · резерв " + fmtShort(Math.max(0, week.reserveLeft));
 
     grid.innerHTML = week.items.map(function (item) {
-      var statusClass = item.isFuture ? "pending" : item.ok ? "ok" : "bad";
-      var statusMark = item.isFuture ? "·" : item.ok ? "✓" : "✕";
+      var statusClass = (item.isFuture || item.isToday) ? "pending" : item.ok ? "ok" : "bad";
+      var statusMark = (item.isFuture || item.isToday) ? "·" : item.ok ? "✓" : "✕";
       var dayLabel = new Date(item.date + "T00:00:00").toLocaleDateString("uk-UA", { weekday: "short" });
       var dateLabel = item.date.slice(8) + "." + item.date.slice(5, 7);
       var carryLabel = item.isFuture ? "старт " + fmtShort(Math.max(0, item.available)) : "далі " + fmtShort(Math.max(0, item.carryOut));
@@ -1424,15 +1424,9 @@
 
   function renderRecords() {
     var box = document.getElementById("recordsBox");
-    var best = navarHistory().reduce(function (top, row) {
-      if (!top || row.amount > top.amount) return row;
-      return top;
-    }, null);
-    var s = streak();
-    box.innerHTML = '<div class="hof-title">Рекорди</div>' +
-      '<div class="record-row"><span>Найкращий перенос</span><span>' + (best ? esc(monthLabel(best.month)) + " · " + esc(fmtShort(best.amount)) : "—") + '</span></div>' +
-      '<div class="record-row"><span>Рекорд серії</span><span>' + s.record + ' дн.</span></div>' +
-      '<div class="record-row"><span>Місяців у наварі</span><span>' + navarHistory().length + '</span></div>';
+    if (!box) return;
+    box.innerHTML = "";
+    box.hidden = true;
   }
 
   function renderExpenseCategorySettings() {
@@ -1519,7 +1513,7 @@
       }).join("");
     }
     var expenseNote = document.getElementById("expenseCategoryNote");
-    if (expenseNote) expenseNote.textContent = expenseCatNames().length + " категорій · кольори одразу йдуть у журнал, ліміти та аналітику";
+    if (expenseNote) expenseNote.textContent = expenseCatNames().length + " категорій · зміни по списку застосуються кнопкою знизу";
     renderExpenseCategorySettings();
   }
 
@@ -2308,12 +2302,14 @@
     style.id = "expenseCategoryIconStyles";
     style.textContent =
       '.expense-cat-form input[name="icon"]{width:72px;text-align:center;}' +
-      '.expense-cat-row{grid-template-columns:auto auto minmax(0,1fr) 72px 48px auto auto;}' +
-      '.expense-cat-icon-btn{min-width:52px;padding-inline:10px;}' +
+      '.expense-cat-list{display:grid;gap:10px;}' +
+      '.expense-cat-card{border:1px solid var(--hair);border-radius:12px;padding:10px 12px;background:var(--panel-2);overflow-x:auto;}' +
+      '.expense-cat-row{display:grid;grid-template-columns:minmax(180px,1fr) auto 78px 56px auto;gap:8px;align-items:center;min-width:420px;}' +
+      '.expense-cat-row input[type="text"]{min-width:0;}' +
+      '.expense-cat-icon-btn{min-width:48px;padding-inline:10px;}' +
       '.expense-cat-icon-input{text-align:center;}' +
-      '.expense-cat-presets,.expense-cat-form-presets{display:flex;flex-wrap:wrap;gap:6px;grid-column:1 / -1;}' +
-      '.expense-cat-preset{min-width:38px;padding:6px 8px;}' +
-      '@media (max-width: 720px){.expense-cat-row{grid-template-columns:auto auto 1fr;}.expense-cat-icon-input,.expense-cat-row input[type="color"],.expense-cat-row .btn,.expense-cat-row .icon-btn,.expense-cat-presets{grid-column:1 / -1;}}';
+      '.expense-cat-actions{display:flex;justify-content:flex-end;margin-top:12px;}' +
+      '@media (max-width: 720px){.expense-cat-actions{justify-content:stretch;}.expense-cat-actions .btn-primary{width:100%;}}';
     document.head.appendChild(style);
   }
 
@@ -2333,21 +2329,86 @@
       form.insertBefore(iconInput, colorInput || form.querySelector("button"));
     }
     var presets = form.querySelector(".expense-cat-form-presets");
-    if (!presets) {
-      presets = document.createElement("div");
-      presets.className = "expense-cat-form-presets";
-      presets.innerHTML = EXPENSE_ICON_PRESETS.map(function (icon) {
-        return '<button class="icon-btn expense-cat-preset" type="button" data-form-cat-preset="' + esc(icon) + '" aria-label="Швидка іконка">' + esc(icon) + '</button>';
-      }).join("");
-      form.parentNode.insertBefore(presets, form.nextSibling);
-      presets.querySelectorAll("[data-form-cat-preset]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          iconInput.value = btn.dataset.formCatPreset || "";
-          iconInput.focus();
-        });
+    if (presets) presets.remove();
+    return iconInput;
+  }
+
+  function collectExpenseCategoryDrafts() {
+    var wrap = document.getElementById("expenseCategoryList");
+    var currentRows = expenseCats().slice();
+    if (!wrap) return [];
+    var rows = Array.prototype.slice.call(wrap.querySelectorAll("[data-cat-index]"));
+    var drafts = [];
+    var seen = Object.create(null);
+    for (var index = 0; index < rows.length; index += 1) {
+      var row = rows[index];
+      var current = currentRows[index];
+      if (!current) continue;
+      var nameInput = row.querySelector("[data-cat-name]");
+      var colorInput = row.querySelector("[data-cat-color]");
+      var iconInput = row.querySelector("[data-cat-icon]");
+      var nextName = normalizeExpenseCategoryName(nameInput && nameInput.value);
+      if (!nextName) {
+        showError("категорії", "Введи назву категорії.");
+        if (nameInput) nameInput.focus();
+        return null;
+      }
+      var key = nextName.toLocaleLowerCase("uk-UA");
+      if (seen[key]) {
+        showError("категорії", "Однакові назви категорій не можна зберегти.");
+        if (nameInput) nameInput.focus();
+        return null;
+      }
+      seen[key] = true;
+      drafts.push({
+        name: nextName,
+        color: normalizeExpenseCategoryColor(colorInput && colorInput.value, current.color),
+        icon: normalizeExpenseCategoryIcon(iconInput && iconInput.value)
       });
     }
-    return iconInput;
+    return drafts;
+  }
+
+  function saveAllExpenseCategoryEdits() {
+    var currentRows = expenseCats().slice();
+    var nextRows = collectExpenseCategoryDrafts();
+    if (!nextRows || nextRows.length !== currentRows.length) return;
+    var changed = nextRows.some(function (row, index) {
+      var current = currentRows[index];
+      return !current || row.name !== current.name || row.color !== current.color || row.icon !== current.icon;
+    });
+    if (!changed) return;
+    var renameClash = currentRows.some(function (current, index) {
+      var next = nextRows[index];
+      if (!next || next.name === current.name) return false;
+      return currentRows.some(function (other, otherIndex) {
+        return otherIndex !== index &&
+          other.name.toLocaleLowerCase("uk-UA") === next.name.toLocaleLowerCase("uk-UA") &&
+          nextRows[otherIndex] &&
+          nextRows[otherIndex].name !== other.name;
+      });
+    });
+    if (renameClash) {
+      showError("категорії", "Взаємне перейменування зроби по черзі, щоб не змішати історію.");
+      return;
+    }
+    var budgets = Object.assign({}, settings().budgets);
+    currentRows.forEach(function (current, index) {
+      var next = nextRows[index];
+      if (!next || next.name === current.name) return;
+      if (Object.prototype.hasOwnProperty.call(budgets, current.name) &&
+        !Object.prototype.hasOwnProperty.call(budgets, next.name)) {
+        budgets[next.name] = budgets[current.name];
+      }
+      delete budgets[current.name];
+      renameExpenseCategoryRefs(current.name, next.name);
+    });
+    saveSettings({ expenseCategories: nextRows, budgets: budgets });
+    currentRows.forEach(function (current, index) {
+      var next = nextRows[index];
+      if (next && next.name !== current.name) persistExpenseCategoryRename(current.name, next.name);
+    });
+    renderAll();
   }
 
   function renderExpenseCategorySettings() {
@@ -2355,33 +2416,17 @@
     var wrap = document.getElementById("expenseCategoryList");
     if (!wrap) return;
     var rows = expenseCats();
+    wrap.classList.add("expense-cat-list");
     wrap.innerHTML = rows.map(function (row, index) {
-      var presets = EXPENSE_ICON_PRESETS.map(function (icon) {
-        return '<button class="icon-btn expense-cat-preset" type="button" data-cat-preset="' + esc(icon) + '" aria-label="Швидка іконка">' + esc(icon) + '</button>';
-      }).join("");
-      return '<div class="expense-cat-row" data-cat-index="' + index + '">' +
-        '<span class="cat-dot expense-cat-dot" style="background:' + esc(row.color) + '"></span>' +
+      return '<div class="expense-cat-card">' +
+        '<div class="expense-cat-row" data-cat-index="' + index + '">' +
+        '<input type="text" class="expense-cat-name" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
         '<button class="btn expense-cat-icon-btn" type="button" data-cat-pick-icon aria-label="Іконка категорії">' + esc(row.icon || "🙂") + '</button>' +
-        '<input type="text" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
         '<input type="text" data-cat-icon class="expense-cat-icon-input" value="' + esc(row.icon || "") + '" maxlength="8" placeholder="🙂" aria-label="Іконка категорії" />' +
         '<input type="color" data-cat-color value="' + esc(row.color) + '" aria-label="Колір категорії" />' +
-        '<button class="btn" type="button" data-save-expense-cat="' + index + '">Оновити</button>' +
         '<button class="icon-btn" type="button" data-del-expense-cat="' + esc(row.name) + '" aria-label="Видалити категорію">✕</button>' +
-        '<div class="expense-cat-presets">' + presets + '</div>' +
-        '</div>';
-    }).join("");
-    wrap.querySelectorAll("[data-save-expense-cat]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var row = btn.closest(".expense-cat-row");
-        if (!row) return;
-        saveExpenseCategoryEdit(
-          Number(btn.dataset.saveExpenseCat),
-          row.querySelector("[data-cat-name]").value,
-          row.querySelector("[data-cat-color]").value,
-          row.querySelector("[data-cat-icon]").value
-        );
-      });
-    });
+        '</div></div>';
+    }).join("") + '<div class="expense-cat-actions"><button class="btn-primary" type="button" id="saveExpenseCategories">Оновити категорії</button></div>';
     wrap.querySelectorAll("[data-cat-pick-icon]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var row = btn.closest(".expense-cat-row");
@@ -2389,16 +2434,6 @@
         if (!input) return;
         input.focus();
         input.select();
-      });
-    });
-    wrap.querySelectorAll("[data-cat-preset]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var row = btn.closest(".expense-cat-row");
-        var input = row && row.querySelector("[data-cat-icon]");
-        var trigger = row && row.querySelector("[data-cat-pick-icon]");
-        if (!input) return;
-        input.value = btn.dataset.catPreset || "";
-        if (trigger) trigger.textContent = input.value || "🙂";
       });
     });
     wrap.querySelectorAll("[data-cat-icon]").forEach(function (input) {
@@ -2413,6 +2448,12 @@
         dropExpenseCategory(btn.dataset.delExpenseCat);
       });
     });
+    var saveButton = document.getElementById("saveExpenseCategories");
+    if (saveButton) {
+      saveButton.addEventListener("click", function () {
+        saveAllExpenseCategoryEdits();
+      });
+    }
   }
 
   function saveExpenseCategoryEdit(index, rawName, rawColor, rawIcon) {
