@@ -19,6 +19,7 @@ const WEB_ROOT = path.resolve(__dirname, "..", "web");
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DATA_FILE = path.resolve(process.env.DATA_FILE || path.join(__dirname, "data", "users.json"));
 const MAX_BODY = 2 * 1024 * 1024;
+const PENDING_TTL_MS = 24 * 60 * 60 * 1000;
 const COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
 const DEFAULT_EXPENSE_CATEGORIES = [
   { name: "Машина", color: "#5aa8ba", icon: "" },
@@ -48,6 +49,7 @@ function defaultSettings() {
   return {
     budgets: {},
     expenseCategories: DEFAULT_EXPENSE_CATEGORIES.map((row) => ({ name: row.name, color: row.color, icon: row.icon })),
+    glossary: {},
     salaryAmount: 0,
     salaryDays: [5, 20],
     allowanceEnabled: false,
@@ -82,14 +84,53 @@ function emptyAccount() {
   };
 }
 
+function normalizeGlossary(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const out = {};
+  for (const [rawKey, rawValue] of Object.entries(source)) {
+    if (Object.keys(out).length >= 500) break;
+    const key = botAi.normalizeWord(rawKey);
+    const category = String(rawValue || "").replace(/\s+/g, " ").trim().slice(0, 28);
+    if (!key || !category) continue;
+    out[key] = category;
+  }
+  return out;
+}
+
+function normalizeTransactionRow(row) {
+  const copy = row && typeof row === "object" ? Object.assign({}, row) : {};
+  copy.id = String(copy.id || newId());
+  if (!copy.createdAt) copy.createdAt = new Date().toISOString();
+  copy.type = copy.type === "income" ? "income" : copy.type === "transfer" ? "transfer" : "expense";
+  copy.amount = Math.round((Number(copy.amount) || 0) * 100) / 100;
+  copy.wallet = String(copy.wallet || "Кеш");
+  copy.date = typeof copy.date === "string" ? copy.date : String(copy.date || "");
+  copy.category = copy.category == null || copy.category === "" ? null : String(copy.category).slice(0, 28);
+  copy.note = String(copy.note || "").trim().slice(0, 120);
+  copy.reserve = !!copy.reserve;
+  copy.pending = !!copy.pending;
+  copy.srcWord = String(copy.srcWord || "").trim().slice(0, 120);
+  copy.needsCategory = !!copy.needsCategory;
+  return copy;
+}
+
+function isStalePending(row, now) {
+  if (!row || !row.pending) return false;
+  const createdAt = Date.parse(row.createdAt || "");
+  if (!Number.isFinite(createdAt)) return false;
+  return now - createdAt > PENDING_TTL_MS;
+}
+
 function normalizeAccount(value) {
   const account = value && typeof value === "object" ? value : {};
   for (const collection of COLLECTIONS) {
     if (!Array.isArray(account[collection])) account[collection] = [];
   }
+  account.transactions = account.transactions.map(normalizeTransactionRow);
   account.settings = Object.assign(defaultSettings(), account.settings || {});
   account.settings.budgets = Object.assign({}, account.settings.budgets || {});
   account.settings.expenseCategories = normalizeExpenseCategories(account.settings.expenseCategories);
+  account.settings.glossary = normalizeGlossary(account.settings.glossary);
   account.settings.allowanceEnabled = !!account.settings.allowanceEnabled;
   account.settings.salaryAmount = Math.max(0, Number(account.settings.salaryAmount) || 0);
   account.settings.weekBudget = Math.max(0, Number(account.settings.weekBudget) || 0);
@@ -160,6 +201,10 @@ async function accountFor(userId) {
   const store = await storePromise;
   if (!store.users[userId]) store.users[userId] = emptyAccount();
   store.users[userId] = normalizeAccount(store.users[userId]);
+  const before = store.users[userId].transactions.length;
+  const now = Date.now();
+  store.users[userId].transactions = store.users[userId].transactions.filter((row) => !isStalePending(row, now));
+  if (store.users[userId].transactions.length !== before) await persistStore(store);
   return { store, account: store.users[userId] };
 }
 
@@ -273,13 +318,44 @@ function validCollection(name) {
   return COLLECTIONS.includes(name);
 }
 
-function cleanRows(rows) {
+function cleanRows(rows, collection) {
   return (Array.isArray(rows) ? rows : []).map((row) => {
+    if (collection === "transactions") return normalizeTransactionRow(row);
     const copy = Object.assign({}, row);
     copy.id = String(copy.id || newId());
     if (!copy.createdAt) copy.createdAt = new Date().toISOString();
     return copy;
   });
+}
+
+function currentAllowanceInfo(account) {
+  return Object.assign(
+    allowance.dayAllowance(account, botAi.todayISO()),
+    { expenseCategories: account.settings.expenseCategories }
+  );
+}
+
+function categoryLabel(category) {
+  return category && category.icon ? category.icon + " " + category.name : category.name;
+}
+
+function categoryChoiceMarkup(categories, txId, expanded) {
+  const source = Array.isArray(categories) ? categories : [];
+  const visible = !expanded && source.length > 12
+    ? source.slice(0, 11).concat([{ name: "⋯ Ще", more: true }])
+    : source;
+  const rows = [];
+  for (let i = 0; i < visible.length; i += 3) {
+    rows.push(visible.slice(i, i + 3).map((row) => {
+      if (row.more) return { text: "⋯ Ще", callback_data: "setcat_more:" + txId };
+      return { text: categoryLabel(row), callback_data: "setcat:" + txId + ":" + i18nIndex(source, row.name) };
+    }));
+  }
+  return { inline_keyboard: rows };
+}
+
+function i18nIndex(list, name) {
+  return list.findIndex((row) => row && row.name === name);
 }
 
 async function askAiForUser(userId, prompt) {
@@ -299,9 +375,7 @@ async function askAiForUser(userId, prompt) {
 
 async function addTransactionForUser(userId, payload) {
   const { store, account } = await accountFor(userId);
-  const row = Object.assign({}, payload);
-  row.id = String(row.id || newId());
-  if (!row.createdAt) row.createdAt = new Date().toISOString();
+  const row = normalizeTransactionRow(payload);
   const index = account.transactions.findIndex((item) => item.id === row.id);
   if (index >= 0) account.transactions[index] = row;
   else account.transactions.push(row);
@@ -362,11 +436,11 @@ async function api(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/replace-all") {
     const payload = await bodyJson(req);
-    account.transactions = cleanRows(payload.transactions);
-    account.goals = cleanRows(payload.goals);
-    account.recurring = cleanRows(payload.recurring);
-    account.debts = cleanRows(payload.debts);
-    account.amortize = cleanRows(payload.amortize);
+    account.transactions = cleanRows(payload.transactions, "transactions");
+    account.goals = cleanRows(payload.goals, "goals");
+    account.recurring = cleanRows(payload.recurring, "recurring");
+    account.debts = cleanRows(payload.debts, "debts");
+    account.amortize = cleanRows(payload.amortize, "amortize");
     account.settings = normalizeAccount({ settings: Object.assign(defaultSettings(), payload.settings || {}) }).settings;
     await persistStore(store);
     return json(res, 200, { ok: true });
@@ -378,9 +452,10 @@ async function api(req, res, pathname) {
   const id = match[2] ? decodeURIComponent(match[2]) : "";
 
   if (req.method === "POST" && !id) {
-    const payload = Object.assign({}, await bodyJson(req));
+    let payload = Object.assign({}, await bodyJson(req));
     payload.id = String(payload.id || newId());
     if (!payload.createdAt) payload.createdAt = new Date().toISOString();
+    if (collection === "transactions") payload = normalizeTransactionRow(payload);
     account[collection].push(payload);
     await persistStore(store);
     return json(res, 200, { ok: true, id: payload.id });
@@ -388,16 +463,18 @@ async function api(req, res, pathname) {
 
   if ((req.method === "PUT" || req.method === "PATCH") && id) {
     const index = account[collection].findIndex((row) => String(row.id) === id);
-    const payload = Object.assign({}, await bodyJson(req));
+    let payload = Object.assign({}, await bodyJson(req));
     payload.id = id;
     if (req.method === "PUT") {
       if (!payload.createdAt && index >= 0) payload.createdAt = account[collection][index].createdAt;
       if (!payload.createdAt) payload.createdAt = new Date().toISOString();
+      if (collection === "transactions") payload = normalizeTransactionRow(payload);
       if (index >= 0) account[collection][index] = payload;
       else account[collection].push(payload);
     } else {
       if (index < 0) return errorJson(res, 404, "not_found", "Record not found");
-      account[collection][index] = Object.assign({}, account[collection][index], payload, { id });
+      const next = Object.assign({}, account[collection][index], payload, { id });
+      account[collection][index] = collection === "transactions" ? normalizeTransactionRow(next) : next;
     }
     await persistStore(store);
     return json(res, 200, { ok: true, id });
@@ -499,23 +576,52 @@ async function handleBotWrite(message) {
   const chatId = message.chat.id;
   const { account } = await accountFor(userId);
   const expenseCategories = account.settings.expenseCategories;
+  const glossaryRow = botAi.resolveGlossaryWrite(text, account.settings.glossary, expenseCategories);
+  if (glossaryRow) {
+    const saved = await addTransactionForUser(userId, glossaryRow);
+    const current = await accountFor(userId);
+    return sendBotMessage(
+      chatId,
+      botAi.formatWriteReply([saved], currentAllowanceInfo(current.account)),
+      undoMarkup(saved.id),
+      "HTML"
+    );
+  }
   const data = await askAiForUser(userId, botAi.buildWritePrompt(text, expenseCategories));
   const rawRows = Array.isArray(data) ? data : (data && Array.isArray(data.operations) ? data.operations : []);
   const rows = rawRows.map((row) => botAi.normalizeDraft(row, expenseCategories)).filter(Boolean);
   const note = rows.length === 1 ? botAi.noteFromUserText(text) : "";
   if (rows.length === 1 && note) rows[0].note = note;
-  if (!rows.length || (rows.length === 1 && !rows[0].note)) {
+  if (!rows.length || (rows.length === 1 && !rows[0].note && !rows[0].needsCategory)) {
     return sendBotMessage(chatId, botAi.formatWriteReply([]), appMarkup(), "HTML");
   }
+  rows.forEach((row) => {
+    if (!row.needsCategory) {
+      row.pending = false;
+      row.srcWord = "";
+      return;
+    }
+    row.pending = true;
+    row.category = null;
+    row.srcWord = botAi.sourceWord(row.note || text);
+  });
   const saved = [];
   for (const row of rows) saved.push(await addTransactionForUser(userId, row));
+  const pendingRows = saved.filter((row) => row.pending);
+  if (pendingRows.length === 1) {
+    return sendBotMessage(
+      chatId,
+      botAi.formatPendingCategoryReply(pendingRows[0]),
+      categoryChoiceMarkup(expenseCategories, pendingRows[0].id, false),
+      "HTML"
+    );
+  }
+  if (pendingRows.length > 1) {
+    return sendBotMessage(chatId, "Є кілька витрат без категорії. Відкрий Копійку і розстав їх вручну.", appMarkup());
+  }
   const current = await accountFor(userId);
-  const allowanceInfo = Object.assign(
-    allowance.dayAllowance(current.account, botAi.todayISO()),
-    { expenseCategories: current.account.settings.expenseCategories }
-  );
   const markup = saved.length === 1 ? undoMarkup(saved[0].id) : appMarkup();
-  return sendBotMessage(chatId, botAi.formatWriteReply(saved, allowanceInfo), markup, "HTML");
+  return sendBotMessage(chatId, botAi.formatWriteReply(saved, currentAllowanceInfo(current.account)), markup, "HTML");
 }
 
 async function handleBotAsk(message) {
@@ -534,12 +640,70 @@ async function handleBotCallback(query) {
   const id = String(query && query.id || "");
   const data = String(query && query.data || "");
   if (!id) return;
+  const userId = String(query.from && query.from.id || "");
+  if (/^setcat_more:/.test(data)) {
+    const txId = data.slice("setcat_more:".length);
+    const { account } = await accountFor(userId);
+    const row = account.transactions.find((item) => item.id === txId && item.pending);
+    if (!row || !query.message || !query.message.chat || !query.message.message_id) {
+      await telegramCall("answerCallbackQuery", { callback_query_id: id, text: "Ця витрата вже неактуальна" });
+      return;
+    }
+    await telegramCall("answerCallbackQuery", { callback_query_id: id });
+    await telegramCall("editMessageText", {
+      chat_id: query.message.chat.id,
+      message_id: query.message.message_id,
+      text: botAi.formatPendingCategoryReply(row),
+      parse_mode: "HTML",
+      reply_markup: categoryChoiceMarkup(account.settings.expenseCategories, txId, true)
+    });
+    return;
+  }
+  if (/^setcat:/.test(data)) {
+    const parts = data.split(":");
+    const txId = parts[1] || "";
+    const index = Number(parts[2]);
+    const { store, account } = await accountFor(userId);
+    const row = account.transactions.find((item) => item.id === txId && item.pending);
+    const category = Number.isInteger(index) ? account.settings.expenseCategories[index] : null;
+    if (!row || !category) {
+      await telegramCall("answerCallbackQuery", { callback_query_id: id, text: "Ця витрата вже неактуальна" });
+      return;
+    }
+    row.category = category.name;
+    row.pending = false;
+    row.needsCategory = false;
+    const glossaryKey = botAi.normalizeWord(row.srcWord);
+    if (glossaryKey) account.settings.glossary[glossaryKey] = category.name;
+    account.settings.glossary = normalizeGlossary(account.settings.glossary);
+    await persistStore(store);
+    await telegramCall("answerCallbackQuery", {
+      callback_query_id: id,
+      text: "Запамʼятав: «" + (row.srcWord || row.note || "") + "» → " + category.name
+    });
+    if (!query.message || !query.message.chat || !query.message.message_id) return;
+    try {
+      await telegramCall("editMessageText", {
+        chat_id: query.message.chat.id,
+        message_id: query.message.message_id,
+        text: botAi.formatWriteReply([row], currentAllowanceInfo(account)),
+        parse_mode: "HTML",
+        reply_markup: undoMarkup(row.id)
+      });
+    } catch (error) {
+      await telegramCall("editMessageReplyMarkup", {
+        chat_id: query.message.chat.id,
+        message_id: query.message.message_id,
+        reply_markup: undoMarkup(row.id)
+      });
+    }
+    return;
+  }
   if (!/^undo_tx:/.test(data)) {
     await telegramCall("answerCallbackQuery", { callback_query_id: id });
     return;
   }
   const txId = data.slice("undo_tx:".length);
-  const userId = String(query.from && query.from.id || "");
   const removed = await removeTransactionForUser(userId, txId);
   const notice = removed ? "Операцію скасовано." : "Операцію вже скасовано.";
   await telegramCall("answerCallbackQuery", { callback_query_id: id, text: notice });

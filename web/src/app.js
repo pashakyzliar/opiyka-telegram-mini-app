@@ -311,6 +311,7 @@
     return {
       budgets: {},
       expenseCategories: cloneDefaultExpenseCategories(),
+      glossary: {},
       salaryAmount: 0,
       salaryDays: [5, 20],
       salaryPlanEnabled: false,
@@ -330,6 +331,7 @@
   function settings() {
     var s = state.settings || {};
     if (!s.budgets) s.budgets = {};
+    if (!s.glossary || typeof s.glossary !== "object") s.glossary = {};
     s.expenseCategories = normalizeExpenseCategories(s.expenseCategories);
     if (!Array.isArray(s.salaryDays) || !s.salaryDays.length) s.salaryDays = [5, 20];
     s.allowanceEnabled = !!s.allowanceEnabled;
@@ -528,9 +530,12 @@
 
   /* ============================ derived data ============================ */
 
-  function isExpense(t) { return t.type === "expense"; }
-  function isIncome(t) { return t.type === "income"; }
-  function isTransfer(t) { return t.type === "transfer"; }
+  function isExpense(t) { return t && !t.pending && t.type === "expense"; }
+  function isIncome(t) { return t && !t.pending && t.type === "income"; }
+  function isTransfer(t) { return t && !t.pending && t.type === "transfer"; }
+  function visibleTransactions() {
+    return state.transactions.filter(function (t) { return !t.pending; });
+  }
   // One render pass asks for the same month a dozen times over (stats, donut,
   // trend, ticker, delta...). Slice once per pass instead of re-filtering the
   // whole journal each time.
@@ -539,7 +544,7 @@
   function monthTx(mk) {
     var hit = monthCache[mk];
     if (hit) return hit;
-    hit = state.transactions.filter(function (t) { return monthKey(t.date) === mk; });
+    hit = visibleTransactions().filter(function (t) { return monthKey(t.date) === mk; });
     monthCache[mk] = hit;
     return hit;
   }
@@ -724,7 +729,7 @@
 
   function streak() {
     var days = {};
-    state.transactions.forEach(function (t) { if (t.date) days[t.date] = true; });
+    visibleTransactions().forEach(function (t) { if (t.date) days[t.date] = true; });
     var today = todayISO();
     var cur = 0;
     var probe = days[today] ? today : (days[isoAdd(today, -1)] ? isoAdd(today, -1) : null);
@@ -1164,7 +1169,7 @@
     var list = monthTx(state.viewMonth);
     var f = state.filter;
     if (!f) return list;
-    if (f.allMonths) list = state.transactions.slice();
+    if (f.allMonths) list = visibleTransactions().slice();
     return list.filter(function (t) {
       if (f.text && String(t.note || "").toLowerCase().indexOf(f.text.toLowerCase()) < 0 &&
         String(t.category || "").toLowerCase().indexOf(f.text.toLowerCase()) < 0) return false;
@@ -1291,7 +1296,7 @@
   function renderYear() {
     if (state.view !== "year") return;
     document.getElementById("yearLabel").textContent = state.viewYear;
-    var yearTx = state.transactions.filter(function (t) { return yearOf(t.date) === String(state.viewYear); });
+    var yearTx = visibleTransactions().filter(function (t) { return yearOf(t.date) === String(state.viewYear); });
     var inc = sum(yearTx.filter(isIncome)), exp = sum(yearTx.filter(isExpense));
     var navarYear = navarHistory().filter(function (row) { return yearOf(row.month) === String(state.viewYear); })
       .reduce(function (s, row) { return s + row.amount; }, 0);
@@ -1686,7 +1691,7 @@
   }
 
   function repeatLast() {
-    var last = state.transactions.slice().sort(function (a, b) {
+    var last = visibleTransactions().slice().sort(function (a, b) {
       return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
     })[0];
     if (!last) { showError("журнал", "Ще нема що повторювати."); return; }

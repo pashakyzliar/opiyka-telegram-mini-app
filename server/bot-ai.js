@@ -3,6 +3,9 @@
 const EXPENSE_CATS = ["Машина", "Пайка", "Хавка", "Дурка", "Продукти", "Сіги", "Подпіски"];
 const INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
 const WALLETS = ["Кеш"];
+const MONEY_WORDS = ["грн", "гривня", "гривні", "гривень", "uah", "usd", "eur"];
+const DATE_WORDS = ["сьогодні", "вчора", "позавчора", "завтра"];
+const NOTE_STOP_WORDS = ["я", "ми", "запиши", "додай", "додав", "додала", "витратив", "витратила", "дохід", "доход", "витрата", "витрати", "купив", "купила"];
 
 function pad(n) {
   return n < 10 ? "0" + n : String(n);
@@ -65,9 +68,9 @@ function noteFromUserText(text) {
     .replace(/\d+(?:[\s.,]\d+)*/g, " ")
     .replace(/[₴$€]/g, " ")
     .replace(/[.,;:+\-–—()[\]{}\\/]+/g, " ");
-  value = stripWords(value, ["грн", "гривня", "гривні", "гривень", "uah", "usd", "eur"]);
-  value = stripWords(value, ["сьогодні", "вчора", "позавчора", "завтра"]);
-  value = stripWords(value, ["я", "ми", "запиши", "додай", "додав", "додала", "витратив", "витратила", "дохід", "доход", "витрата", "витрати", "купив", "купила"]);
+  value = stripWords(value, MONEY_WORDS);
+  value = stripWords(value, DATE_WORDS);
+  value = stripWords(value, NOTE_STOP_WORDS);
   return value.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
@@ -88,6 +91,43 @@ function normalizeLower(text) {
   return String(text || "").replace(/\s+/g, " ").trim().toLocaleLowerCase("uk-UA");
 }
 
+function normalizeWord(word) {
+  let value = String(word || "").toLocaleLowerCase("uk-UA").replace(/[^\p{L}]+/gu, "");
+  if (value.length > 4) value = value.slice(0, -1);
+  return value;
+}
+
+function sourceWords(text) {
+  return noteFromUserText(text).split(/\s+/).map((word) => String(word || "").trim()).filter(Boolean);
+}
+
+function sourceWord(text) {
+  return sourceWords(text)[0] || "";
+}
+
+function resolveGlossaryWrite(text, glossary, expenseCategories) {
+  const numbers = String(text || "").match(/\d+(?:[\s.,]\d+)*/g) || [];
+  if (numbers.length !== 1) return null;
+  const amount = parseAmount(numbers[0]);
+  if (amount == null) return null;
+  const words = sourceWords(text);
+  if (words.length !== 1) return null;
+  const rawWord = words[0];
+  const key = normalizeWord(rawWord);
+  if (!key) return null;
+  const category = glossary && typeof glossary === "object" ? glossary[key] : "";
+  if (!expenseCategoryNames(expenseCategories).includes(category)) return null;
+  return {
+    type: "expense",
+    category,
+    amount,
+    wallet: WALLETS[0],
+    date: todayISO(),
+    note: noteFromUserText(text),
+    srcWord: rawWord
+  };
+}
+
 function buildWritePrompt(text, expenseCategories) {
   const today = todayISO();
   return [
@@ -96,9 +136,11 @@ function buildWritePrompt(text, expenseCategories) {
     "Статті витрат: " + expenseCategoryNames(expenseCategories).join(", ") + ".",
     "Статті доходу: " + INCOME_CATS.join(", ") + ".",
     "Гаманці: " + WALLETS.join(", ") + ".",
-    "Поверни ТІЛЬКИ JSON-масив об'єктів виду " +
-      '{"type":"expense"|"income","category":"...","amount":123.45,"wallet":"Кеш","date":"YYYY-MM-DD","note":"..."}' + ".",
+    "Поверни ТІЛЬКИ JSON-об'єкт виду " +
+      '{"operations":[{"type":"expense"|"income","category":"...","amount":123.45,"wallet":"Кеш","date":"YYYY-MM-DD","note":"..."}]}' + ".",
     "Категорію обирай лише зі списків вище.",
+    "Якщо жодна категорія витрат зі списку не підходить упевнено, повертай \"category\": null і не вгадуй.",
+    "Приклад: \"150 грн стіки\" → {\"operations\":[{\"amount\":150,\"category\":null,\"note\":\"стіки\"}]}.",
     "Якщо гаманець не вказано, став \"Кеш\".",
     "Відносні дати переводь у конкретні YYYY-MM-DD. Якщо дата не вказана, став сьогодні.",
     "Поле note заповнюй короткою назвою покупки або сервісу без суми й без валюти.",
@@ -127,11 +169,14 @@ function normalizeDraft(row, expenseCategories) {
   if (amount == null) return null;
   const type = row.type === "income" ? "income" : "expense";
   const categories = type === "income" ? INCOME_CATS : expenseCategoryNames(expenseCategories);
-  const category = categories.includes(row.category) ? row.category : categories[0];
   const wallet = WALLETS.includes(row.wallet) ? row.wallet : WALLETS[0];
   const date = isIsoDate(row.date) ? String(row.date) : todayISO();
   const note = String(row.note || "").trim().slice(0, 120);
-  return { type, category, amount, wallet, date, note };
+  if (!categories.includes(row.category)) {
+    if (type === "expense") return { type, category: null, amount, wallet, date, note, needsCategory: true };
+    return { type, category: categories[0], amount, wallet, date, note };
+  }
+  return { type, category: row.category, amount, wallet, date, note, needsCategory: false };
 }
 
 function normalizeFilter(value, expenseCategories) {
@@ -152,7 +197,7 @@ function normalizeFilter(value, expenseCategories) {
 function filterTransactions(transactions, filter) {
   const list = Array.isArray(transactions) ? transactions : [];
   return list.filter((row) => {
-    if (!row || !isIsoDate(row.date)) return false;
+    if (!row || row.pending || !isIsoDate(row.date)) return false;
     if (row.type !== "expense" && row.type !== "income") return false;
     if (filter.type && row.type !== filter.type) return false;
     if (filter.categories.length && !filter.categories.includes(row.category)) return false;
@@ -208,7 +253,8 @@ function formatNote(note, category) {
 
 function formatCategoryLabel(row, expenseCategories) {
   const icon = categoryEmoji(row.category, row.type, expenseCategories);
-  return escapeHtml(icon ? icon + " " + row.category : row.category);
+  const name = row.category || "Без категорії";
+  return escapeHtml(icon ? icon + " " + name : name);
 }
 
 function formatAllowanceBlock(info, show) {
@@ -234,7 +280,7 @@ function formatWriteReply(rows, allowanceInfo) {
   if (!rows.length) return "Не зміг розібрати запис. Спробуй написати щось на кшталт: 180 грн Glovo";
   const today = todayISO();
   const expenseCategories = allowanceInfo && allowanceInfo.expenseCategories;
-  const showAllowance = rows.some((row) => row.type === "expense" && row.date === today);
+  const showAllowance = rows.some((row) => row.type === "expense" && row.date === today && !row.pending);
   if (rows.length === 1) {
     const row = rows[0];
     const note = formatNote(row.note, row.category);
@@ -252,6 +298,12 @@ function formatWriteReply(rows, allowanceInfo) {
   });
   const allowanceBlock = formatAllowanceBlock(allowanceInfo, showAllowance);
   return "Записав " + rows.length + " операції:\n" + lines.join("\n") + allowanceBlock;
+}
+
+function formatPendingCategoryReply(row) {
+  return "<b>" + escapeHtml(formatMoney(row.amount)) + "</b>\n" +
+    "Не зрозумів, що таке «" + escapeHtml(row.srcWord || row.note || "") + "». Куди віднести?\n" +
+    "Запамʼятаю на майбутнє.";
 }
 
 function formatAskReply(filter, rows, total) {
@@ -300,6 +352,9 @@ module.exports = {
   todayISO,
   isoAdd,
   noteFromUserText,
+  normalizeWord,
+  sourceWord,
+  resolveGlossaryWrite,
   buildWritePrompt,
   buildAskPrompt,
   normalizeDraft,
@@ -310,6 +365,7 @@ module.exports = {
   indicator,
   categoryEmoji,
   formatWriteReply,
+  formatPendingCategoryReply,
   formatAskReply,
   routeBotMessage,
   helpText,
