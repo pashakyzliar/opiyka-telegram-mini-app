@@ -63,10 +63,12 @@ test("formatWriteReply renders allowance bar in html", () => {
     todayLimit: 1000,
     spentToday: 640,
     todayAvailable: 360,
+    weekAvailable: 520,
     overBy: 0,
     expenseCategories: categories
   });
   assert.match(text, /<code>/);
+  assert.match(text, /520/);
   assert.match(text, /лишилось <b>/);
   assert.match(text, /Сіги/);
 });

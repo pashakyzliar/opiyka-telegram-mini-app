@@ -261,14 +261,17 @@ function formatAllowanceBlock(info, show) {
   if (!info || !show) return "";
   const safeLimit = Math.max(0, Number(info.todayLimit) || 0);
   const spentToday = Number(info.spentToday) || 0;
-  const todayAvailable = Number(info.todayAvailable) || 0;
+  const dayProgressAvailable = Number(info.todayAvailable) || 0;
+  const todayAvailable = Number.isFinite(Number(info.weekAvailable))
+    ? Math.max(0, Number(info.weekAvailable))
+    : Math.max(0, dayProgressAvailable);
   const overBy = Math.max(0, Number(info.overBy) || 0);
   const pct = safeLimit > 0 ? (spentToday / safeLimit) * 100 : 100;
   const marker = indicator(pct);
   if (!info.enabled || !info.configured) {
     return "\nСьогодні: <b>" + escapeHtml(formatMoney(spentToday)) + "</b>";
   }
-  if (todayAvailable < 0 || pct >= 100) {
+  if (dayProgressAvailable < 0 || pct >= 100) {
     return "\nСьогодні: <b>" + escapeHtml(formatMoney(spentToday)) + "</b>" +
       "\nПеревитрата <b>" + escapeHtml(formatMoney(overBy)) + "</b>";
   }
