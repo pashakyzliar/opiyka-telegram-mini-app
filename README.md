@@ -97,7 +97,53 @@ npm run db:import-json -- --source server/data/users.json
 користувачів, операцій, цілей, регулярних платежів, боргів і амортизацій.
 Файли `*.backup-*` і `users.json` навмисно ігноруються Git.
 
+## SQL-only
+
+Цей застосунок працює тільки з PostgreSQL. Runtime-запис у `server/data/users.json` більше не використовується ні локально, ні в Railway production. Єдине бойове джерело істини для користувачів, транзакцій, категорій, glossary та лімітів - `DATABASE_URL`.
+
+- `npm start` запускає `node server/server.js`
+- перед стартом має виконуватись `npm run db:migrate`
+- `JSON_IMPORT_SOURCE` потрібен лише для одноразового імпорту старого JSON через `npm run db:import-json`
+
 ## Production
+
+### Railway settings
+
+Для Railway станом на 2026-09-04 тримай таку конфігурацію:
+
+- Source repo/branch: SQL-гілка цього репозиторію. Не перемикай сервіс на `main`, якщо там лишається JSON-версія
+- Node version: `20.x`
+- Build command: порожньо
+- Pre-deploy command: `npm run db:migrate`
+- Start command: `npm start`
+- Healthcheck path: `/health`
+
+Обов'язкові variables:
+
+- `DATABASE_URL`
+- `BOT_TOKEN`
+- `USER_ID_PEPPER`
+- `PUBLIC_URL`
+- `CORS_ORIGIN`
+
+AI variables, якщо AI увімкнений:
+
+- `AI_BASE_URL`
+- `AI_MODEL=openai/gpt-oss-120b`
+- `AI_KEY`
+- `AI_REASONING_EFFORT=low`
+- `AI_DAILY_LIMIT=30`
+- `AI_MIN_GAP_MS=3000`
+
+Опційні variables:
+
+- `DATABASE_SSL_MODE=require`
+- `DATABASE_SSL_REJECT_UNAUTHORIZED=1`
+- `INIT_DATA_MAX_AGE=900`
+- `INIT_DATA_MAX_FUTURE_SKEW=60`
+- `MAX_BODY_BYTES=2097152`
+
+Для SQL-режиму не задавай `DATA_FILE`. Volume для `users.json` не потрібен: дані користувачів зберігаються в PostgreSQL сервісі Railway.
 
 Використовуйте окремі ролі: міграції виконуються власником схеми, а застосунок
 підключається роллю без DDL та без `BYPASSRLS`. Після міграції надайте лише
