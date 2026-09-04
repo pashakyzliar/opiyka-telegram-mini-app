@@ -15,6 +15,7 @@ const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = String(process.env.BOT_TOKEN || "");
 const PUBLIC_URL = String(process.env.PUBLIC_URL || "").replace(/\/$/, "");
 const WEB_ROOT = path.resolve(__dirname, "..", "web");
+const REPO_ROOT = path.resolve(__dirname, "..");
 const DATA_FILE = path.resolve(process.env.DATA_FILE || path.join(__dirname, "data", "users.json"));
 const MAX_BODY = 2 * 1024 * 1024;
 const COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
@@ -155,6 +156,17 @@ function json(res, status, value) {
   res.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
+    "Content-Length": Buffer.byteLength(body)
+  });
+  res.end(body);
+}
+
+function jsonDownload(res, filename, value) {
+  const body = JSON.stringify(value, null, 2);
+  res.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Content-Disposition": 'attachment; filename="' + filename.replace(/"/g, "") + '"',
     "Content-Length": Buffer.byteLength(body)
   });
   res.end(body);
@@ -305,6 +317,9 @@ async function api(req, res, pathname) {
 
   const { store, account } = await accountFor(auth.id);
   if (req.method === "GET" && pathname === "/api/state") return json(res, 200, account);
+  if (req.method === "GET" && pathname === "/api/export") {
+    return jsonDownload(res, "kopiyka-" + auth.id + "-" + new Date().toISOString().slice(0, 10) + ".json", account);
+  }
 
   if (req.method === "GET" && pathname === "/api/ai/status") {
     if (!ai.configured()) return json(res, 200, { enabled: false });
@@ -600,5 +615,9 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log("Копійка слухає порт " + PORT);
   console.log(ai.configured() ? "AI увімкнено: " + ai.AI_MODEL : "AI вимкнено: не задано AI_BASE_URL.");
+  const dataRelative = path.relative(REPO_ROOT, DATA_FILE);
+  if (process.env.RAILWAY_ENVIRONMENT && dataRelative && !dataRelative.startsWith("..") && !path.isAbsolute(dataRelative)) {
+    console.warn("УВАГА: DATA_FILE не на Volume — дані зникнуть при наступному деплої");
+  }
   void botPolling();
 });
