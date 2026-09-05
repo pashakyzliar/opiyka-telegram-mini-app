@@ -242,6 +242,7 @@
   }
 
   bootTelegram();
+  window.KOPIYKA_API_REQUEST = request;
 
   window.claude = {
     use: function (capability) {

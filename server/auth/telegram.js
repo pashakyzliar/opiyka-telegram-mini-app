@@ -89,7 +89,9 @@ function authenticatedUser(req) {
   return {
     mode: "telegram",
     telegramId: String(telegramUser.id),
-    telegramKey: pseudonymizeTelegramId(telegramUser.id)
+    telegramKey: pseudonymizeTelegramId(telegramUser.id),
+    firstName: String(telegramUser.first_name || "").trim().slice(0, 80),
+    photoUrl: String(telegramUser.photo_url || "").trim().slice(0, 2048)
   };
 }
 

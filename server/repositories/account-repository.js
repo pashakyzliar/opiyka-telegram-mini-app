@@ -173,6 +173,7 @@ async function serializeSettings(client, userId) {
       createdAt: new Date(item.created_at).toISOString()
     })),
     calmMode: !!row.calm_mode,
+    lockEnabled: !!row.login_lock_enabled,
     pin: row.pin_hash || "",
     lastBackup: lastBackupMillis(row.last_backup_at),
     streakRecord: row.streak_record || 0,
@@ -309,6 +310,99 @@ async function getAccountState(client, userId) {
     amortize: await serializeAmortizations(client, userId),
     settings
   };
+}
+
+async function getProfile(client, userId) {
+  const result = await client.query(
+    `SELECT MIN(tx_date) AS since
+     FROM transactions
+     WHERE user_id = $1`,
+    [userId]
+  );
+  const since = result.rows[0] && result.rows[0].since;
+  return { since: since ? since.toISOString().slice(0, 10) : null };
+}
+
+async function glossaryMap(client, userId) {
+  const result = await client.query(
+    `SELECT g.word, c.name
+     FROM user_glossary g
+     JOIN categories c ON c.id = g.category_id AND c.user_id = g.user_id
+     WHERE g.user_id = $1 AND c.archived_at IS NULL`,
+    [userId]
+  );
+  return result.rows.reduce((out, row) => { out[row.word] = row.name; return out; }, {});
+}
+
+async function incrementGlossaryHit(client, userId, word) {
+  await client.query("UPDATE user_glossary SET hits = hits + 1 WHERE user_id = $1 AND word = $2", [userId, word]);
+}
+
+async function listGlossary(client, userId) {
+  const result = await client.query(
+    `SELECT g.id, g.word_raw, g.source, g.hits, g.created_at, c.id AS category_id, c.name AS category_name, c.icon AS category_icon
+     FROM user_glossary g
+     JOIN categories c ON c.id = g.category_id AND c.user_id = g.user_id
+     WHERE g.user_id = $1
+     ORDER BY g.hits DESC, g.created_at DESC`,
+    [userId]
+  );
+  return result.rows.map((row) => ({
+    id: String(row.id), word: row.word_raw, source: row.source, hits: Number(row.hits) || 0,
+    createdAt: new Date(row.created_at).toISOString(),
+    categoryId: row.category_id, category: { id: row.category_id, name: row.category_name, icon: row.category_icon || "" }
+  }));
+}
+
+async function glossaryCategories(client, userId) {
+  const result = await client.query(
+    `SELECT id, name, icon FROM categories
+     WHERE user_id = $1 AND kind = 'expense' AND archived_at IS NULL
+     ORDER BY sort_order ASC, created_at ASC`,
+    [userId]
+  );
+  return result.rows.map((row) => ({ id: row.id, name: row.name, icon: row.icon || "" }));
+}
+
+async function upsertGlossary(client, userId, word, wordRaw, categoryId, source) {
+  const result = await client.query(
+    `INSERT INTO user_glossary (user_id, word, word_raw, category_id, source)
+     SELECT $1, $2, $3, c.id, $5
+     FROM categories c
+     WHERE c.user_id = $1 AND c.id = $4 AND c.kind = 'expense' AND c.archived_at IS NULL
+     ON CONFLICT (user_id, word) DO UPDATE SET
+       word_raw = EXCLUDED.word_raw, category_id = EXCLUDED.category_id, source = EXCLUDED.source
+     RETURNING id`,
+    [userId, word, wordRaw, categoryId, source]
+  );
+  if (!result.rows.length) throw appError(404, "not_found", "Category not found");
+  return String(result.rows[0].id);
+}
+
+async function upsertGlossaryByCategoryName(client, userId, word, wordRaw, categoryName) {
+  const category = await client.query(
+    `SELECT id FROM categories WHERE user_id = $1 AND kind = 'expense' AND name = $2 AND archived_at IS NULL LIMIT 1`,
+    [userId, categoryName]
+  );
+  if (!category.rows.length) return null;
+  return upsertGlossary(client, userId, word, wordRaw, category.rows[0].id, "learned");
+}
+
+async function updateGlossaryCategory(client, userId, id, categoryId) {
+  const result = await client.query(
+    `UPDATE user_glossary g SET category_id = c.id
+     FROM categories c
+     WHERE g.id = $2 AND g.user_id = $1
+       AND c.id = $3 AND c.user_id = $1 AND c.kind = 'expense' AND c.archived_at IS NULL
+     RETURNING g.id`,
+    [userId, id, categoryId]
+  );
+  return result.rows.length > 0;
+}
+
+async function deleteGlossary(client, userId, id) {
+  const result = await client.query("DELETE FROM user_glossary WHERE user_id = $1 AND id = $2 RETURNING id", [userId, id]);
+  return result.rows.length > 0;
 }
 
 async function insertTransaction(client, userId, row, extraData) {
@@ -519,9 +613,10 @@ async function replaceSettings(client, userId, settings, extraSettings) {
        week_reserve = $6::numeric,
        calm_mode = $7,
        pin_hash = $8,
-       last_backup_at = CASE WHEN $9::bigint > 0 THEN to_timestamp($9::double precision / 1000.0) ELSE NULL END,
-       streak_record = $10,
-       extra_settings = $11::jsonb
+       login_lock_enabled = $9,
+       last_backup_at = CASE WHEN $10::bigint > 0 THEN to_timestamp($10::double precision / 1000.0) ELSE NULL END,
+       streak_record = $11,
+       extra_settings = $12::jsonb
      WHERE user_id = $1`,
     [
       userId,
@@ -532,6 +627,7 @@ async function replaceSettings(client, userId, settings, extraSettings) {
       amountToNumeric(settings.weekReserve, "weekReserve"),
       settings.calmMode,
       settings.pin,
+      settings.lockEnabled && !!settings.pin,
       settings.lastBackup,
       settings.streakRecord,
       JSON.stringify(extraSettings || {})
@@ -692,6 +788,15 @@ async function writeAuditEvent(client, userId, eventType, requestId, details) {
 }
 
 module.exports = {
+  getProfile,
+  glossaryMap,
+  incrementGlossaryHit,
+  listGlossary,
+  glossaryCategories,
+  upsertGlossary,
+  upsertGlossaryByCategoryName,
+  updateGlossaryCategory,
+  deleteGlossary,
   ensureScaffold,
   getAccountState,
   getCollectionRow,

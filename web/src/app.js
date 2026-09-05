@@ -323,6 +323,7 @@
       weekDaily: [0, 0, 0, 0, 0, 0, 0],
       navarHistory: [],
       calmMode: false,
+      lockEnabled: false,
       pin: "",
       lastBackup: 0,
       streakRecord: 0,
@@ -336,6 +337,7 @@
     s.expenseCategories = normalizeExpenseCategories(s.expenseCategories);
     if (!Array.isArray(s.salaryDays) || !s.salaryDays.length) s.salaryDays = [5, 20];
     s.allowanceEnabled = !!s.allowanceEnabled;
+    s.lockEnabled = !!s.lockEnabled;
     s.salaryAmount = Math.max(0, round2(s.salaryAmount));
     s.salaryPlanEnabled = !!s.salaryPlanEnabled;
     if (!Array.isArray(s.salaryPayments)) s.salaryPayments = [];
@@ -1975,10 +1977,37 @@
   }
   function lockIfNeeded() {
     var s = settings();
-    if (!s.pin) { document.getElementById("pinGate").hidden = true; return; }
+    if (!s.pin || !s.lockEnabled) { document.getElementById("pinGate").hidden = true; return; }
     if (sessionStorage.getItem("kopiyka_unlocked") === "1") { document.getElementById("pinGate").hidden = true; return; }
     document.getElementById("pinGate").hidden = false;
+    if (localStorage.getItem("kopiyka_lock_mode") === "biometric") tryBiometricUnlock();
     setTimeout(function () { document.getElementById("pinInput").focus(); }, 60);
+  }
+
+  var biometricAttempted = false;
+  function biometricLabel() {
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var bio = tg && tg.BiometricManager;
+    if (!bio) return "Біометрія";
+    return bio.biometricType === "face" ? "Face ID" : bio.biometricType === "finger" ? "Відбиток пальця" : "Біометрія";
+  }
+  function tryBiometricUnlock() {
+    if (biometricAttempted) return;
+    biometricAttempted = true;
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var bio = tg && tg.BiometricManager;
+    if (!bio || !bio.init) return;
+    try {
+      bio.init(function () {
+        if (!bio.isBiometricAvailable || !bio.authenticate) return;
+        bio.authenticate({ reason: "Доступ до Копійки" }, function (ok) {
+          if (!ok) return;
+          sessionStorage.setItem("kopiyka_unlocked", "1");
+          document.getElementById("pinGate").hidden = true;
+          focusAmount();
+        });
+      });
+    } catch (_error) {}
   }
 
   /* ============================ AI (sample) ============================ */
@@ -2580,6 +2609,103 @@
     refreshExpenseLabels();
   }
 
+  function showCabinetProfile() {
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || (window.KOPIYKA_TELEGRAM && window.KOPIYKA_TELEGRAM.user) || {};
+    var name = String(user.first_name || "Користувач").trim() || "Користувач";
+    var avatar = document.getElementById("cabinetAvatar");
+    var nameEl = document.getElementById("cabinetName");
+    if (nameEl) nameEl.textContent = name;
+    if (avatar) {
+      avatar.textContent = name.slice(0, 1).toLocaleUpperCase("uk-UA");
+      if (user.photo_url) { avatar.style.backgroundImage = "url(" + String(user.photo_url).replace(/[\"\\\\]/g, "") + ")"; avatar.textContent = ""; }
+    }
+    if (!tg || !tg.initData) return;
+    fetch("/api/profile", { headers: { "X-Telegram-Init-Data": tg.initData, "Accept": "application/json" } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (profile) {
+        if (!profile) return;
+        if (nameEl) nameEl.textContent = profile.firstName || name;
+        if (avatar && profile.photoUrl) { avatar.style.backgroundImage = "url(" + String(profile.photoUrl).replace(/[\"\\\\]/g, "") + ")"; avatar.textContent = ""; }
+        var since = document.getElementById("cabinetSince");
+        if (since && profile.since) {
+          var date = new Date(profile.since + "T00:00:00");
+          since.textContent = "з нами з " + date.toLocaleDateString("uk-UA", { month: "2-digit", year: "numeric" });
+          since.hidden = false;
+        }
+      }).catch(function () {});
+  }
+
+  function showCabinetSecurity() {
+    var menu = document.querySelector(".cabinet-menu");
+    var detail = document.getElementById("cabinetDetail");
+    if (!menu || !detail) return;
+    menu.hidden = true; detail.hidden = false;
+    var mode = localStorage.getItem("kopiyka_lock_mode") || "pin";
+    var hasPin = !!settings().pin;
+    detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button>' +
+      '<h2 class="cabinet-detail-title">Захист входу</h2>' +
+      '<label class="cabinet-choice"><input type="radio" name="cabinetLock" value="off"' + (!settings().lockEnabled ? ' checked' : '') + '> Вимкнено</label>' +
+      '<label class="cabinet-choice"><input type="radio" name="cabinetLock" value="pin"' + (settings().lockEnabled && mode !== "biometric" ? ' checked' : '') + '> PIN-код</label>' +
+      '<label class="cabinet-choice" id="cabinetBioChoice"><input type="radio" name="cabinetLock" value="biometric"' + (settings().lockEnabled && mode === "biometric" ? ' checked' : '') + '> ' + esc(biometricLabel()) + '</label>' +
+      '<label class="setting-row"><span>PIN-код</span><input type="text" id="cabinetPin" inputmode="numeric" maxlength="12" placeholder="4–12 цифр" value="' + (hasPin ? "••••" : "") + '"></label>' +
+      '<p class="setting-note">Біометрія — локальний замок пристрою. Сервер і далі перевіряє лише підпис Telegram.</p>';
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var bio = tg && tg.BiometricManager;
+    if (!bio || !bio.init) document.getElementById("cabinetBioChoice").hidden = true;
+    document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+    detail.querySelectorAll('input[name="cabinetLock"]').forEach(function (input) {
+      input.onchange = function () {
+        var value = input.value;
+        if (value === "off") { localStorage.removeItem("kopiyka_lock_mode"); saveSettings({ lockEnabled: false }); return; }
+        if (!settings().pin) { showError("Захист входу", "Спершу задайте PIN-код."); input.checked = false; return; }
+        if (value === "biometric") {
+          if (!bio || !bio.init) { showError("Захист входу", "Біометрія недоступна на цьому пристрої."); input.checked = false; return; }
+          try { bio.init(function () { if (!bio.isBiometricAvailable) { showError("Захист входу", "Біометрія недоступна на цьому пристрої."); return; } bio.requestAccess({ reason: "Щоб швидко відкривати Копійку" }, function (granted) { if (granted) { localStorage.setItem("kopiyka_lock_mode", "biometric"); saveSettings({ lockEnabled: true }); } }); }); } catch (_error) {}
+          return;
+        }
+        localStorage.setItem("kopiyka_lock_mode", "pin"); saveSettings({ lockEnabled: true });
+      };
+    });
+    document.getElementById("cabinetPin").onchange = function () {
+      var value = String(this.value).trim();
+      if (value === "••••") return;
+      if (!/^\d{4,12}$/.test(value)) { showError("PIN", "PIN — від 4 до 12 цифр."); return; }
+      hashPin(value).then(function (hash) { saveSettings({ pin: hash, lockEnabled: true }); localStorage.setItem("kopiyka_lock_mode", "pin"); sessionStorage.setItem("kopiyka_unlocked", "1"); });
+    };
+  }
+
+  function showCabinetGlossary() {
+    var menu = document.querySelector(".cabinet-menu");
+    var detail = document.getElementById("cabinetDetail");
+    var request = window.KOPIYKA_API_REQUEST;
+    if (!menu || !detail || !request) return;
+    menu.hidden = true; detail.hidden = false;
+    detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Мій словник</h2><div class="empty-note">Завантаження…</div>';
+    document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+    request("/api/glossary", { method: "GET" }).then(function (data) {
+      var rows = data.rows || [], cats = data.categories || [];
+      var options = cats.map(function (cat) { return '<option value="' + esc(cat.id) + '">' + esc((cat.icon ? cat.icon + " " : "") + cat.name) + '</option>'; }).join("");
+      detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Мій словник</h2>' +
+        '<form id="glossaryForm" class="stack-form"><input name="word" maxlength="32" placeholder="Слово, наприклад стіки" required><select name="categoryId">' + options + '</select><button class="btn-primary">Додати</button></form>' +
+        '<input type="search" id="glossarySearch" placeholder="Пошук слова" aria-label="Пошук слова"><div id="glossaryList"></div>';
+      document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+      var list = document.getElementById("glossaryList");
+      function render(filter) {
+        var needle = String(filter || "").toLocaleLowerCase("uk-UA");
+        var visible = rows.filter(function (row) { return String(row.word || "").toLocaleLowerCase("uk-UA").includes(needle); });
+        list.innerHTML = visible.length ? visible.map(function (row) {
+          return '<div class="glossary-row" data-glossary-id="' + esc(row.id) + '"><div><b>' + esc(row.word) + '</b> → ' + esc((row.category.icon ? row.category.icon + " " : "") + row.category.name) + '<small>' + (row.source === "learned" ? "вивчено ботом" : "додано вручну") + " · " + row.hits + " разів" + '</small></div><select data-glossary-category>' + cats.map(function (cat) { return '<option value="' + esc(cat.id) + '"' + (cat.id === row.categoryId ? " selected" : "") + '>' + esc(cat.name) + '</option>'; }).join("") + '</select><button class="icon-btn" type="button" data-glossary-save>✎</button><button class="icon-btn" type="button" data-glossary-delete>✕</button></div>';
+        }).join("") : '<div class="empty-note">Словник наповнюється сам, коли бот питає про незнайоме слово.</div>';
+        list.querySelectorAll("[data-glossary-save]").forEach(function (button) { button.onclick = function () { var row = button.closest("[data-glossary-id]"); request("/api/glossary/" + encodeURIComponent(row.dataset.glossaryId), { method: "PATCH", body: JSON.stringify({ categoryId: row.querySelector("[data-glossary-category]").value }) }).then(function () { showCabinetGlossary(); }).catch(function (e) { reportFailure("словник", e); }); }; });
+        list.querySelectorAll("[data-glossary-delete]").forEach(function (button) { button.onclick = function () { var row = button.closest("[data-glossary-id]"); confirmBox("Видалити слово зі словника?").then(function (ok) { if (!ok) return; request("/api/glossary/" + encodeURIComponent(row.dataset.glossaryId), { method: "DELETE" }).then(function () { showCabinetGlossary(); }).catch(function (e) { reportFailure("словник", e); }); }); }; });
+      }
+      render("");
+      document.getElementById("glossarySearch").oninput = function () { render(this.value); };
+      document.getElementById("glossaryForm").onsubmit = function (event) { event.preventDefault(); var fd = new FormData(event.target); request("/api/glossary", { method: "POST", body: JSON.stringify({ word: fd.get("word"), categoryId: fd.get("categoryId") }) }).then(function () { showCabinetGlossary(); }).catch(function (e) { reportFailure("словник", e); }); };
+    }).catch(function (error) { detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><div class="empty-note">Не вдалося відкрити словник.</div>'; document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; }; reportFailure("словник", error); });
+  }
+
   function wire() {
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
@@ -2644,7 +2770,8 @@
           t.classList.toggle("active", on); t.setAttribute("aria-selected", on ? "true" : "false");
         });
         function swap() {
-          ["main", "year", "plan", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
+          ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
+          if (state.view === "cabinet") showCabinetProfile();
           renderAll();
         }
         // A second transition started while one is still running rejects with
@@ -2662,6 +2789,31 @@
           if (vt && vt.ready && vt.ready.catch) vt.ready.catch(function () {});
         } else swap();
       });
+    });
+
+    document.querySelectorAll("[data-cabinet-target]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var target = button.dataset.cabinetTarget;
+        if (target === "security") { showCabinetSecurity(); return; }
+        if (target === "glossary") { showCabinetGlossary(); return; }
+        if (target === "quick") return;
+        state.view = "settings";
+        document.querySelectorAll(".viewtab").forEach(function (tab) {
+          var on = tab.dataset.view === "settings";
+          tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== "settings"; });
+        var map = { security: "settings-security", categories: "settings-categories", limits: "settings-limits" };
+        var el = document.getElementById(map[target]);
+        if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+      });
+    });
+    var support = document.getElementById("cabinetSupport");
+    if (support) support.addEventListener("click", function (event) {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (!tg || !tg.openTelegramLink) return;
+      event.preventDefault();
+      tg.openTelegramLink("https://t.me/mriya7");
     });
 
     // recurring
@@ -2797,7 +2949,7 @@
       if (!v) { saveSettings({ pin: "" }); showError("PIN", "Замок вимкнено."); return; }
       if (!/^\d{4,12}$/.test(v)) { showError("PIN", "PIN — від 4 до 12 цифр."); return; }
       hashPin(v).then(function (h) {
-        saveSettings({ pin: h });
+        saveSettings({ pin: h, lockEnabled: true });
         sessionStorage.setItem("kopiyka_unlocked", "1");
         showError("PIN", "Замок увімкнено. Він ховає екран, але не шифрує дані.");
       });

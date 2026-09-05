@@ -31,6 +31,7 @@ const SETTINGS_KEYS = new Set([
   "weekDaily",
   "navarHistory",
   "calmMode",
+  "lockEnabled",
   "pin",
   "lastBackup",
   "streakRecord",
@@ -187,6 +188,7 @@ function defaultSettings() {
     weekDaily: [0, 0, 0, 0, 0, 0, 0],
     navarHistory: [],
     calmMode: false,
+    lockEnabled: false,
     pin: "",
     lastBackup: 0,
     streakRecord: 0,
@@ -256,6 +258,7 @@ function normalizeSettings(input, collections) {
   out.weekDaily = normalizeWeekDaily(out.weekDaily);
   out.navarHistory = normalizeNavarHistory(out.navarHistory);
   out.calmMode = normalizeBoolean(out.calmMode);
+  out.lockEnabled = normalizeBoolean(out.lockEnabled);
   out.pin = normalizeOptionalName(out.pin, "pin", 255);
   out.lastBackup = Math.max(0, Number(out.lastBackup) || 0);
   out.streakRecord = Math.max(0, Number(out.streakRecord) || 0);
