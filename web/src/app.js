@@ -1506,6 +1506,7 @@
 
   function renderTicker() {
     var track = document.getElementById("tickerTrack");
+    if (!track) return;
     var mtx = monthTx(state.viewMonth).filter(isExpense);
     var totals = {};
     mtx.forEach(function (t) { totals[t.category] = (totals[t.category] || 0) + t.amount; });
