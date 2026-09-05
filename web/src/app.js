@@ -16,7 +16,7 @@
   var INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
   var WALLETS = ["Кеш"];
  
-  var EXPENSE_ICON_PRESETS = ["🚗", "🍱", "🍔", "🎉", "🛒", "🚬", "📦", "💳"];
+  var EXPENSE_ICON_PRESETS = ["🛒", "🍔", "☕", "🍱", "🚗", "⛽", "🚌", "🚕", "🏠", "💡", "📱", "💳", "🚬", "💊", "🏥", "👕", "🎁", "🎉", "🎮", "📦", "🐾", "✈️", "📚", "💈"];
 
   var LS_KEY = "kopiyka_v2";
   var COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
@@ -325,7 +325,6 @@
       calmMode: false,
       lockEnabled: false,
       pin: "",
-      lastBackup: 0,
       streakRecord: 0,
       bestRate: null
     };
@@ -778,6 +777,15 @@
     }
   }
 
+  var calendarDay = todayISO();
+  function refreshCalendarDay() {
+    var today = todayISO();
+    if (today === calendarDay) return;
+    if (state.viewMonth === monthKey(calendarDay)) state.viewMonth = monthKey(today);
+    calendarDay = today;
+    renderAll();
+  }
+
   function renderStats() {
     var balance = totalBalance();
     animateValue(document.getElementById("statBalance"), prevStat.balance, balance, fmt, true);
@@ -850,25 +858,15 @@
   function renderAllowance() {
     var a = allowance();
     var card = document.getElementById("allowanceCard");
-    var monthlyCard = document.getElementById("monthlyForecastCard");
     var bento = card ? card.closest(".bento") : null;
     var show = state.view === "main" && a.active && a.enabled;
     if (card) card.hidden = !show;
-    if (monthlyCard) monthlyCard.hidden = !show;
     if (bento) bento.dataset.allowance = show ? "on" : "off";
     if (!show) return;
     var el = document.getElementById("allowanceValue");
     var visible = a.active && a.configured ? Math.max(0, a.weekAvailable) : 0;
     animateValue(el, prevStat.allowance, visible, fmt, true);
     prevStat.allowance = visible;
-    var monthlyVisible = a.active && a.configured ? Math.max(0, a.todayAvailable) : 0;
-    var monthlyEl = document.getElementById("monthlyForecastValue");
-    animateValue(monthlyEl, null, monthlyVisible, fmt, true);
-    document.getElementById("monthlyForecastBasis").textContent = "місячний залишок";
-    document.getElementById("monthlyForecastSpent").textContent = "Сьогодні витрачено " + fmtShort(a.spentToday);
-    document.getElementById("monthlyForecastHint").textContent = a.todayAvailable < 0 ? " · перевищення " + fmtShort(a.overBy) : "";
-    document.getElementById("monthlyForecastBar").style.width = (a.todayLimit > 0 ? Math.min(100, (a.spentToday / a.todayLimit) * 100) : 0) + "%";
-    document.getElementById("monthlyForecastBar").classList.toggle("over", a.todayAvailable < 0);
     if (!a.active) {
       document.getElementById("allowanceBasis").textContent = "лише для поточного місяця";
       document.getElementById("allowanceSpentToday").textContent = "Перемкнись на поточний місяць";
@@ -1416,33 +1414,6 @@
     box.hidden = true;
   }
 
-  function renderExpenseCategorySettings() {
-    var wrap = document.getElementById("expenseCategoryList");
-    if (!wrap) return;
-    var rows = expenseCats();
-    wrap.innerHTML = rows.map(function (row, index) {
-      return '<div class="expense-cat-row" data-cat-index="' + index + '">' +
-        '<span class="cat-dot expense-cat-dot" style="background:' + esc(row.color) + '"></span>' +
-        '<input type="text" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
-        '<input type="color" data-cat-color value="' + esc(row.color) + '" aria-label="Колір категорії" />' +
-        '<button class="btn" type="button" data-save-expense-cat="' + index + '">Оновити</button>' +
-        '<button class="icon-btn" type="button" data-del-expense-cat="' + esc(row.name) + '" aria-label="Видалити категорію">✕</button>' +
-        '</div>';
-    }).join("");
-    wrap.querySelectorAll("[data-save-expense-cat]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var row = btn.closest(".expense-cat-row");
-        if (!row) return;
-        saveExpenseCategoryEdit(Number(btn.dataset.saveExpenseCat), row.querySelector("[data-cat-name]").value, row.querySelector("[data-cat-color]").value);
-      });
-    });
-    wrap.querySelectorAll("[data-del-expense-cat]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        dropExpenseCategory(btn.dataset.delExpenseCat);
-      });
-    });
-  }
-
   function renderSettings() {
     if (state.view !== "settings") return;
     var s = settings();
@@ -1849,34 +1820,16 @@
     }).catch(function (e) { console.error("[Копійка] міграція:", e); });
   }
 
-  /* ============================ backup / export ============================ */
-
-  function snapshotPayload() {
-    var out = { app: "kopiyka", version: 5, exportedAt: new Date().toISOString(), settings: settings() };
-    COLLECTIONS.forEach(function (c) { out[c] = state[c]; });
-    return out;
-  }
+  /* ============================ експорт CSV ============================ */
 
   function saveFile(filename, data) {
     if (!caps.downloads) { showError("копія", "Збереження файлів недоступне у цьому вікні."); return Promise.resolve(false); }
     return caps.downloads.save({ filename: filename, data: data }).then(function () {
-      saveSettings({ lastBackup: Date.now() });
-      hideNudge();
       return true;
     }).catch(function (e) {
       if (e && e.code === "declined") { showError("копія", "Збереження скасовано."); }
       else if (e && e.code === "rate_limited") { showError("копія", "Зачекай секунду і спробуй ще."); }
       else { showError("копія", "Не вдалось зберегти (" + ((e && e.code) || "помилка") + ")."); }
-      return false;
-    });
-  }
-
-  function doBackup() {
-    var source = store && store.exportAll ? Promise.resolve(store.exportAll()) : Promise.resolve(snapshotPayload());
-    return source.then(function (payload) {
-      return saveFile("kopiyka-" + todayISO() + ".json", JSON.stringify(payload, null, 2));
-    }).catch(function (e) {
-      reportFailure("копія", e);
       return false;
     });
   }
@@ -1895,28 +1848,6 @@
     // BOM + semicolons: Excel on a Ukrainian locale opens this straight.
     var csv = "﻿" + head.map(cell).join(";") + "\r\n" + rows.join("\r\n") + "\r\n";
     return saveFile("kopiyka-" + todayISO() + ".csv", csv);
-  }
-
-  function doRestore(file) {
-    var reader = new FileReader();
-    reader.onload = function () {
-      var parsed;
-      try { parsed = JSON.parse(String(reader.result)); }
-      catch (e) { showError("відновлення", "Файл пошкоджений — це не коректний JSON."); return; }
-      if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.transactions)) {
-        showError("відновлення", "У файлі нема журналу операцій. Це не копія Копійки.");
-        return;
-      }
-      confirmBox("Замінити всі поточні дані вмістом файлу? Операцій у файлі: " + parsed.transactions.length + ".").then(function (ok) {
-        if (!ok) return;
-        if (!state.ready) { showError("відновлення", "Дані ще вантажаться — спробуй за секунду."); return; }
-        Promise.resolve(store.replaceAll(parsed)).then(function () {
-          showError("відновлення", "Готово, дані замінено.");
-        }).catch(function (e) { reportFailure("відновлення", e); });
-      });
-    };
-    reader.onerror = function () { showError("відновлення", "Не вдалось прочитати файл."); };
-    reader.readAsText(file);
   }
 
   function requestAccountDeletion() {
@@ -1942,15 +1873,6 @@
       });
     });
   }
-
-  function maybeNudge() {
-    if (!caps.downloads) return;
-    var last = Number(settings().lastBackup) || 0;
-    if (Date.now() - last < 7 * 86400000) return;
-    if (!state.transactions.length) return;
-    document.getElementById("backupNudge").hidden = false;
-  }
-  function hideNudge() { document.getElementById("backupNudge").hidden = true; }
 
   /* ============================ PIN ============================ */
 
@@ -2320,35 +2242,99 @@
     saveSettings({ expenseCategories: rows.concat(missing) });
   }
 
-  function ensureExpenseCategoryStyles() {
-    if (document.getElementById("expenseCategoryIconStyles")) return;
-    var style = document.createElement("style");
-    style.id = "expenseCategoryIconStyles";
-    style.textContent =
-      '.expense-cat-form input[name="icon"]{width:72px;text-align:center;}' +
-      '.expense-cat-list{display:grid;gap:10px;}' +
-      '.expense-cat-card{border:1px solid var(--hair);border-radius:12px;padding:10px 12px;background:var(--panel-2);overflow-x:auto;}' +
-      '.expense-cat-row{display:grid;grid-template-columns:minmax(180px,1fr) auto 78px 56px auto;gap:8px;align-items:center;min-width:420px;}' +
-      '.expense-cat-row input[type="text"]{min-width:0;}' +
-      '.expense-cat-icon-btn{min-width:48px;padding-inline:10px;}' +
-      '.expense-cat-icon-input{text-align:center;}' +
-      '.expense-cat-actions{display:flex;justify-content:flex-end;margin-top:12px;}' +
-      '@media (max-width: 720px){.expense-cat-actions{justify-content:stretch;}.expense-cat-actions .btn-primary{width:100%;}}';
-    document.head.appendChild(style);
+  var expenseIconTarget = null;
+
+  function closeExpenseIconPicker() {
+    var picker = document.getElementById("expenseIconPicker");
+    if (picker) picker.hidden = true;
+    if (expenseIconTarget) expenseIconTarget.setAttribute("aria-expanded", "false");
+    expenseIconTarget = null;
+  }
+
+  function positionExpenseIconPicker() {
+    var picker = document.getElementById("expenseIconPicker");
+    if (!picker || picker.hidden || !expenseIconTarget) return;
+    if (!expenseIconTarget.isConnected) { closeExpenseIconPicker(); return; }
+    var rect = expenseIconTarget.getBoundingClientRect();
+    var viewport = window.visualViewport;
+    var topEdge = viewport ? viewport.offsetTop : 0;
+    var bottomEdge = topEdge + (viewport ? viewport.height : window.innerHeight);
+    var leftEdge = viewport ? viewport.offsetLeft : 0;
+    var rightEdge = leftEdge + (viewport ? viewport.width : window.innerWidth);
+    var top = rect.bottom + 8;
+    if (top + picker.offsetHeight > bottomEdge - 8) top = rect.top - picker.offsetHeight - 8;
+    picker.style.top = Math.max(topEdge + 8, top) + "px";
+    picker.style.left = Math.max(leftEdge + 8, Math.min(rect.left, rightEdge - picker.offsetWidth - 8)) + "px";
+  }
+
+  function showExpenseIconPicker(input) {
+    var picker = document.getElementById("expenseIconPicker");
+    if (!picker) return;
+    if (expenseIconTarget && expenseIconTarget !== input) expenseIconTarget.setAttribute("aria-expanded", "false");
+    expenseIconTarget = input;
+    input.setAttribute("aria-expanded", "true");
+    picker.hidden = false;
+    positionExpenseIconPicker();
+  }
+
+  function wireExpenseIconPicker() {
+    var picker = document.getElementById("expenseIconPicker");
+    if (!picker) return;
+    picker.innerHTML = '<div class="expense-icon-picker-title">Емодзі витрат</div><div class="expense-icon-options">' +
+      EXPENSE_ICON_PRESETS.map(function (icon) {
+        return '<button type="button" data-expense-icon="' + esc(icon) + '" aria-label="Обрати ' + esc(icon) + '">' + esc(icon) + '</button>';
+      }).join("") + '</div><button type="button" class="expense-icon-clear" data-expense-icon="">Без емодзі</button>';
+    function isIconInput(target) {
+      return target && target.matches && target.matches('[data-cat-icon], #expenseCategoryForm input[name="icon"]');
+    }
+    document.addEventListener("focusin", function (event) {
+      if (isIconInput(event.target)) showExpenseIconPicker(event.target);
+      else if (!picker.contains(event.target)) closeExpenseIconPicker();
+    });
+    document.addEventListener("click", function (event) {
+      if (isIconInput(event.target)) showExpenseIconPicker(event.target);
+      else if (!picker.contains(event.target)) closeExpenseIconPicker();
+    });
+    picker.addEventListener("pointerdown", function (event) {
+      if (event.target.closest("[data-expense-icon]")) event.preventDefault();
+    });
+    picker.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-expense-icon]");
+      if (!button || !expenseIconTarget) return;
+      expenseIconTarget.value = button.dataset.expenseIcon;
+      expenseIconTarget.dispatchEvent(new Event("input", { bubbles: true }));
+      var input = expenseIconTarget;
+      closeExpenseIconPicker();
+      input.focus({ preventScroll: true });
+      closeExpenseIconPicker();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeExpenseIconPicker();
+    });
+    window.addEventListener("resize", positionExpenseIconPicker);
+    window.addEventListener("scroll", function (event) {
+      if (!picker.contains(event.target)) closeExpenseIconPicker();
+    }, true);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", positionExpenseIconPicker);
   }
 
   function ensureExpenseCategoryFormExtras() {
     var form = document.getElementById("expenseCategoryForm");
     if (!form) return null;
-    ensureExpenseCategoryStyles();
     var iconInput = form.querySelector('input[name="icon"]');
     if (!iconInput) {
       iconInput = document.createElement("input");
       iconInput.type = "text";
       iconInput.name = "icon";
+      iconInput.className = "expense-cat-icon-input";
       iconInput.maxLength = 8;
       iconInput.placeholder = "🙂";
       iconInput.setAttribute("aria-label", "Іконка категорії");
+      iconInput.setAttribute("aria-haspopup", "dialog");
+      iconInput.setAttribute("aria-controls", "expenseIconPicker");
+      iconInput.setAttribute("aria-expanded", "false");
+      iconInput.autocomplete = "off";
+      iconInput.spellcheck = false;
       var colorInput = form.querySelector('input[name="color"]');
       form.insertBefore(iconInput, colorInput || form.querySelector("button"));
     }
@@ -2440,33 +2426,21 @@
     var wrap = document.getElementById("expenseCategoryList");
     if (!wrap) return;
     var rows = expenseCats();
+    var signature = JSON.stringify(rows);
+    // Синхронізація інших даних не повинна стирати незбережені поля категорій.
+    if (wrap.dataset.categoriesSignature === signature) return;
+    closeExpenseIconPicker();
+    wrap.dataset.categoriesSignature = signature;
     wrap.classList.add("expense-cat-list");
     wrap.innerHTML = rows.map(function (row, index) {
       return '<div class="expense-cat-card">' +
         '<div class="expense-cat-row" data-cat-index="' + index + '">' +
         '<input type="text" class="expense-cat-name" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
-        '<button class="btn expense-cat-icon-btn" type="button" data-cat-pick-icon aria-label="Іконка категорії">' + esc(row.icon || "🙂") + '</button>' +
-        '<input type="text" data-cat-icon class="expense-cat-icon-input" value="' + esc(row.icon || "") + '" maxlength="8" placeholder="🙂" aria-label="Іконка категорії" />' +
+        '<input type="text" data-cat-icon class="expense-cat-icon-input" value="' + esc(row.icon || "") + '" maxlength="8" placeholder="🙂" autocomplete="off" spellcheck="false" aria-label="Емодзі категорії" aria-haspopup="dialog" aria-expanded="false" aria-controls="expenseIconPicker" />' +
         '<input type="color" data-cat-color value="' + esc(row.color) + '" aria-label="Колір категорії" />' +
         '<button class="icon-btn" type="button" data-del-expense-cat="' + esc(row.name) + '" aria-label="Видалити категорію">✕</button>' +
         '</div></div>';
     }).join("") + '<div class="expense-cat-actions"><button class="btn-primary" type="button" id="saveExpenseCategories">Оновити категорії</button></div>';
-    wrap.querySelectorAll("[data-cat-pick-icon]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var row = btn.closest(".expense-cat-row");
-        var input = row && row.querySelector("[data-cat-icon]");
-        if (!input) return;
-        input.focus();
-        input.select();
-      });
-    });
-    wrap.querySelectorAll("[data-cat-icon]").forEach(function (input) {
-      input.addEventListener("input", function () {
-        var row = input.closest(".expense-cat-row");
-        var trigger = row && row.querySelector("[data-cat-pick-icon]");
-        if (trigger) trigger.textContent = input.value || "🙂";
-      });
-    });
     wrap.querySelectorAll("[data-del-expense-cat]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         dropExpenseCategory(btn.dataset.delExpenseCat);
@@ -2571,13 +2545,7 @@
     if (cm) cm.checked = !!s.calmMode;
     var ps = document.getElementById("pinSet");
     if (ps && document.activeElement !== ps) ps.value = s.pin ? "••••" : "";
-    var catColor = document.querySelector('#expenseCategoryForm input[name="color"]');
-    if (catColor && document.activeElement !== catColor) {
-      catColor.value = DEFAULT_EXPENSE_CATEGORY_ROWS[expenseCats().length % DEFAULT_EXPENSE_CATEGORY_ROWS.length].color;
-    }
     ensureExpenseCategoryFormExtras();
-    var catIcon = document.querySelector('#expenseCategoryForm input[name="icon"]');
-    if (catIcon && document.activeElement !== catIcon) catIcon.value = "";
   }
 
   function refreshExpenseLabels() {
@@ -2777,6 +2745,11 @@
   }
 
   function wire() {
+    wireExpenseIconPicker();
+    setInterval(refreshCalendarDay, 60000);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) refreshCalendarDay();
+    });
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
     dateInput.value = todayISO();
@@ -2875,6 +2848,7 @@
         ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== "settings"; });
         var map = { security: "settings-security", categories: "settings-categories", limits: "settings-limits" };
         var el = document.getElementById(map[target]);
+        renderAll();
         if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
       });
     });
@@ -3025,19 +2999,8 @@
       });
     });
 
-    document.getElementById("btnBackup").addEventListener("click", doBackup);
-    document.getElementById("btnExportAccount").addEventListener("click", doBackup);
     document.getElementById("btnCsv").addEventListener("click", doCsv);
-    document.getElementById("btnRestore").addEventListener("click", function () { document.getElementById("restoreFile").click(); });
     document.getElementById("btnDeleteAccount").addEventListener("click", requestAccountDeletion);
-    document.getElementById("restoreFile").addEventListener("change", function () {
-      if (this.files && this.files[0]) doRestore(this.files[0]);
-      this.value = "";
-    });
-    document.getElementById("nudgeSave").addEventListener("click", doBackup);
-    document.getElementById("nudgeDismiss").addEventListener("click", function () {
-      hideNudge(); saveSettings({ lastBackup: Date.now() - 6 * 86400000 });
-    });
 
     // search
     document.getElementById("searchToggle").addEventListener("click", function () {
@@ -3137,7 +3100,6 @@
       ensureExpenseCategoriesFromData();
       postDueRecurring();
       renderAll();
-      maybeNudge();
       focusAmount();
       introOnce();
     }, 260);
@@ -3181,10 +3143,9 @@
     Promise.resolve(useCap("downloads")).catch(function () { return null; }).then(function (d) {
       caps.downloads = d;
       var has = !!d;
-      ["btnBackup", "btnCsv", "btnRestore"].forEach(function (id) {
+      ["btnCsv"].forEach(function (id) {
         var el = document.getElementById(id); if (el) el.hidden = !has;
       });
-      if (has) maybeNudge();
     });
 
     Promise.resolve(useCap("sample")).catch(function () { return null; }).then(function (s) {

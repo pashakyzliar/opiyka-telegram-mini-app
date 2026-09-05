@@ -34,12 +34,6 @@
     </div>
   </div>
 
-  <div class="backup-nudge" id="backupNudge" hidden aria-hidden="true">
-    <span>Тиждень без резервної копії. Зберегти?</span>
-    <button class="btn" type="button" id="nudgeSave">Зберегти копію</button>
-    <button class="icon-btn" type="button" id="nudgeDismiss" aria-label="Пізніше">✕</button>
-  </div>
-
   <section class="view" id="view-main">
 
     <section class="panel panel-ledger panel-ledger-priority">
@@ -122,13 +116,6 @@
         <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
       </div>
 
-      <div class="cell cell-hero" id="monthlyForecastCard">
-        <span class="cell-label">Прогноз на місяць <span class="cell-sub2" id="monthlyForecastBasis"></span></span>
-        <span class="denomination money" id="monthlyForecastValue">—</span>
-        <div class="cell-sub"><span id="monthlyForecastSpent">Сьогодні витрачено 0 ₴</span><span id="monthlyForecastHint"></span></div>
-        <div class="bar-track"><div class="bar-fill" id="monthlyForecastBar" style="width:0%"></div></div>
-      </div>
-
       <div class="cell cell-balance">
         <span class="cell-label">Общак <span class="cell-sub2">заг. баланс</span></span>
         <span class="cell-value money" id="statBalance">0,00 ₴</span>
@@ -206,7 +193,7 @@
         <div id="recList"></div>
       </section>
 
-      <section class="panel" id="settings-limits">
+      <section class="panel" id="plan-amortize">
         <div class="panel-head"><h2>Амортизація</h2><button class="btn" type="button" id="addAmBtn">+ витрата</button></div>
         <p class="panel-note">Рідкі великі витрати, розкидані по місяцях.</p>
         <form id="amForm" class="stack-form" hidden>
@@ -218,7 +205,7 @@
         <div id="amList"></div>
       </section>
 
-      <section class="panel" id="settings-categories">
+      <section class="panel" id="plan-debts">
         <div class="panel-head"><h2>Борги</h2><button class="btn" type="button" id="addDebtBtn">+ борг</button></div>
         <p class="panel-note">Окремо від витрат — у статистику не йдуть.</p>
         <form id="debtForm" class="stack-form" hidden>
@@ -250,7 +237,7 @@
         <div class="setting-note" id="salaryPlanNote"></div>
       </section>
 
-      <section class="panel" id="settings-security">
+      <section class="panel" id="settings-limits">
         <div class="panel-head"><h2>Тиждень</h2><span class="panel-note">План, резерв і денні ліміти</span></div>
         <label class="setting-row"><span>Сьогодні можна</span>
           <input type="checkbox" id="allowanceEnabled" /></label>
@@ -270,7 +257,7 @@
         <div class="setting-note" id="weekPlanStatus"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="settings-categories">
         <div class="panel-head"><h2>Кастомізація витрат</h2><span class="panel-note">створюй секції та кольори</span></div>
         <form id="expenseCategoryForm" class="stack-form expense-cat-form">
           <input type="text" name="name" placeholder="Нова категорія" maxlength="28" required />
@@ -286,7 +273,7 @@
         <div class="records" id="navarList"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="settings-security">
         <div class="panel-head"><h2>Сервіс</h2></div>
         <label class="setting-row"><span>Спокійний режим</span>
           <input type="checkbox" id="calmMode" /></label>
@@ -295,10 +282,6 @@
         <div class="setting-actions">
           <button class="btn" type="button" id="btnCsv">Експорт у CSV</button>
           <button class="btn" type="button" id="btnDeleteAccount">Видалити акаунт</button>
-          <button class="btn" type="button" id="btnBackup" hidden>Зберегти копію</button>
-          <button class="btn" type="button" id="btnExportAccount" hidden>Експорт акаунта</button>
-          <button class="btn" type="button" id="btnRestore" hidden>Відновити з копії</button>
-          <input type="file" id="restoreFile" accept="application/json,.json" hidden />
         </div>
         <div class="records" id="recordsBox"></div>
       </section>
@@ -330,15 +313,15 @@
 </div>
 
 <nav class="viewtabs wallet-dock" role="tablist" aria-label="Основна навігація">
-  <button class="viewtab active" data-view="main" role="tab" aria-selected="true"><small>01</small>Місяць</button>
-  <button class="viewtab" data-view="plan" role="tab" aria-selected="false"><small>02</small>Плани</button>
-  <span class="wallet-dock-gap" aria-hidden="true"></span>
-  <button class="viewtab" data-view="year" role="tab" aria-selected="false"><small>03</small>Рік</button>
-  <button class="viewtab" data-view="cabinet" role="tab" aria-selected="false"><small>04</small>Кабінет</button>
-  <button class="viewtab" data-view="settings" role="tab" aria-selected="false"><small>05</small>Налашт.</button>
-  <span class="wallet-dock-mark" aria-label="Wallet">W</span>
+  <button class="viewtab active" data-view="main" role="tab" aria-controls="view-main" aria-selected="true">Місяць</button>
+  <button class="viewtab" data-view="plan" role="tab" aria-controls="view-plan" aria-selected="false">Плани</button>
+  <button class="viewtab" data-view="year" role="tab" aria-controls="view-year" aria-selected="false">Рік</button>
+  <button class="viewtab" data-view="cabinet" role="tab" aria-controls="view-cabinet" aria-selected="false">Кабінет</button>
+  <button class="viewtab" data-view="settings" role="tab" aria-controls="view-settings" aria-selected="false">Налаштування</button>
+  <span class="wallet-dock-mark" aria-label="Wallet"><span>W</span></span>
 </nav>
 
+<div class="expense-icon-picker" id="expenseIconPicker" role="dialog" aria-label="Емодзі для витрат" hidden></div>
 <div class="chart-tip" id="chartTip"></div>
 <div class="toast-stack" id="toastStack"></div>
 <div class="confirm-back" id="confirmBack" hidden>

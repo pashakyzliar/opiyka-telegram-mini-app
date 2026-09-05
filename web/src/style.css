@@ -236,13 +236,6 @@ h1, h2, .cell-label, .panel-note, .btn, .btn-primary, .viewtab, th {
 .sync-dot.offline { background: var(--gold); }
 .sync-dot.warn { background: var(--negative); }
 
-.backup-nudge {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  border: 1px solid var(--gold); border-left-width: 4px;
-  background: var(--panel); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
-  font-size: 13px;
-}
-
 /* ------------------------- bento ------------------------- */
 
 .bento {
@@ -498,8 +491,7 @@ tbody tr:hover td {
   box-shadow: 0 10px 22px rgba(29,42,34,.08);
 }
 tbody tr {
-  animation: ledger-row-in .5s cubic-bezier(.2,.8,.2,1) both;
-  animation-delay: calc(var(--row-i, 0) * 24ms);
+  animation: none;
 }
 tbody tr td:first-child {
   border-left: 1px solid color-mix(in srgb, var(--gold) 12%, var(--hair));
@@ -953,6 +945,26 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .rec-row .rec-wallet, .rec-row .rec-day { grid-column: span 2; }
   .debt-row { grid-template-columns: auto 1fr auto auto; row-gap: 4px; }
 }
+.expense-cat-list { display: grid; gap: 10px; }
+.expense-cat-card { padding: 10px; border: 1px solid var(--hair); border-radius: 14px; background: var(--panel-2); min-width: 0; }
+.expense-cat-card .expense-cat-row { grid-template-columns: minmax(0, 1fr) 48px 40px 36px; min-width: 0; padding: 0; gap: 6px; border: 0; }
+.expense-cat-card .expense-cat-row input { min-width: 0; }
+.expense-cat-card .expense-cat-row input[type="color"] { width: 40px; min-width: 40px; height: 44px; }
+.expense-cat-card .expense-cat-row .icon-btn { grid-column: auto; width: 36px; height: 44px; padding: 6px; }
+.expense-cat-icon-input, .expense-cat-form input[name="icon"] { width: 48px; height: 44px; padding: 6px 2px; text-align: center; font: 23px/1 system-ui, sans-serif; cursor: pointer; }
+.expense-cat-icon-input:focus { border-color: var(--gold); }
+.expense-cat-actions { display: flex; margin-top: 4px; }
+.expense-cat-actions .btn-primary { width: 100%; min-height: 44px; }
+.expense-cat-form { display: grid; grid-template-columns: minmax(0, 1fr) 48px 40px; gap: 8px; }
+.expense-cat-form input[name="name"] { width: 100%; min-width: 0; }
+.expense-cat-form input[type="color"] { width: 40px; min-width: 40px; height: 44px; padding: 4px; }
+.expense-cat-form > .btn-primary { grid-column: 1 / -1; min-height: 44px; }
+.expense-icon-picker { position: fixed; z-index: 80; width: min(288px, calc(100vw - 16px)); max-height: min(310px, 60dvh); overflow-y: auto; padding: 12px; border: 1px solid var(--hair-strong); border-radius: 18px; background: var(--panel-2); box-shadow: 0 16px 46px rgba(0, 5, 18, .55); }
+.expense-icon-picker-title { margin-bottom: 10px; font: 600 13px/1.4 system-ui, sans-serif; color: var(--ink-soft); }
+.expense-icon-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
+.expense-icon-options button { min-height: 40px; padding: 3px; border: 0; border-radius: 9px; background: transparent; cursor: pointer; font: 23px/1.3 system-ui, sans-serif; }
+.expense-icon-options button:hover, .expense-icon-options button:focus-visible { background: rgba(125,170,255,.18); outline: 1px solid var(--gold); }
+.expense-icon-clear { margin-top: 9px; width: 100%; min-height: 38px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel); color: var(--ink-soft); font: 500 12px system-ui, sans-serif; cursor: pointer; }
 
 /* ===================================================================
    WALLET 2026: спокійний темно-синій financial dashboard.
@@ -989,7 +1001,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
     linear-gradient(180deg, #0a1b31 0%, var(--paper) 38%, #06101e 100%);
 }
 .bg-guilloche, .ticker { display: none; }
-.app { max-width: 760px; padding: 12px 14px 138px; }
+.app { max-width: 760px; padding: 12px 14px calc(162px + env(safe-area-inset-bottom)); }
 
 .dashboard-header {
   display: grid;
@@ -1068,17 +1080,23 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 
 .wallet-dock {
   position: fixed; z-index: 50; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
-  width: min(720px, calc(100vw - 18px)); min-height: 70px; padding: 8px 8px 8px;
-  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch;
-  border: 1px solid rgba(178, 211, 255, .18); border-radius: 22px;
-  background: rgba(8, 23, 42, .92); box-shadow: 0 18px 42px rgba(0, 4, 15, .48); backdrop-filter: blur(20px);
+  width: min(720px, calc(100vw - 16px)); padding: 8px;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "month month mark plan year" "cabinet cabinet mark settings settings";
+  grid-template-rows: 50px 50px; gap: 6px; align-items: stretch;
+  border: 1px solid rgba(178, 211, 255, .14); border-radius: 24px;
+  background: #09182b; box-shadow: 0 12px 36px rgba(0, 4, 15, .5);
 }
-.wallet-dock .viewtab { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; padding: 8px 2px; border: 0; border-radius: 13px; background: transparent; color: var(--ink-muted); font-size: 10px; letter-spacing: .02em; text-transform: none; }
-.wallet-dock .viewtab small { color: #6680a4; font-size: 8px; letter-spacing: .08em; }
-.wallet-dock .viewtab.active { background: #edf4ff; color: #0b1a30; }
-.wallet-dock .viewtab.active small { color: #47617f; }
-.wallet-dock-gap { grid-column: 3; }
-.wallet-dock-mark { position: absolute; left: 50%; top: -15px; width: 58px; height: 58px; transform: translateX(-50%); border: 5px solid #071323; font-size: 22px; box-shadow: 0 10px 24px rgba(0,0,0,.35); }
+.wallet-dock .viewtab { display: grid; place-items: center; min-width: 0; padding: 8px 3px; border: 1px solid var(--hair); border-radius: 16px; background: linear-gradient(160deg, #132a46, #0d1f35); color: #bacee8; font: 550 14px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; letter-spacing: -.02em; text-transform: none; }
+.wallet-dock .viewtab[data-view="main"] { grid-area: month; }
+.wallet-dock .viewtab[data-view="plan"] { grid-area: plan; }
+.wallet-dock .viewtab[data-view="year"] { grid-area: year; }
+.wallet-dock .viewtab[data-view="cabinet"] { grid-area: cabinet; }
+.wallet-dock .viewtab[data-view="settings"] { grid-area: settings; }
+.wallet-dock .viewtab.active { background: #edf4ff; color: #10233e; border-color: #fff; box-shadow: inset 0 -2px 0 rgba(82,112,151,.18); font-weight: 650; }
+.wallet-dock-mark { grid-area: mark; place-self: center; width: 64px; height: 64px; border: 5px solid #09182b; color: #edf4ff; background: radial-gradient(circle, rgba(161,194,248,.24) .8px, transparent 1px) 0 0 / 4px 4px, #193351; box-shadow: 0 0 0 1px rgba(154,190,249,.14), 0 8px 16px rgba(0,0,0,.3); }
+.wallet-dock-mark > span { font: 900 26px/1 "Rubik Mono One", system-ui, sans-serif; letter-spacing: -.1em; padding-right: .1em; transform: skew(-7deg); }
+.toast-stack { bottom: calc(146px + env(safe-area-inset-bottom)); }
 .note { display: none; }
 
 /* Операції мають з’являтися одразу: без count-up, FLIP і святкових спалахів. */
@@ -1086,7 +1104,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .donut-seg, .bar-fill { transition: none !important; }
 
 @media (max-width: 720px) {
-  .app { padding: 8px 10px 126px; }
+  .app { padding: 8px 10px calc(152px + env(safe-area-inset-bottom)); }
   .dashboard-header { min-height: 104px; padding: 15px; border-radius: 19px; }
   .dashboard-brand > span:last-child { display: none; }
   .dashboard-date { padding-left: 10px; }
@@ -1098,8 +1116,10 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .cell-hero { min-height: 150px; }
   .panel-week-hero .week-board { grid-template-columns: repeat(7, minmax(70px, 1fr)); }
   .panel-week-hero { padding: 13px; }
-  .wallet-dock { min-height: 66px; border-radius: 19px; }
-  .wallet-dock .viewtab { font-size: 8px; }
-  .wallet-dock .viewtab small { font-size: 7px; }
-  .wallet-dock-mark { width: 54px; height: 54px; font-size: 20px; }
+  .wallet-dock { border-radius: 21px; }
+}
+@media (max-width: 360px) {
+  .wallet-dock { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 54px minmax(0, 1fr) minmax(0, 1fr); gap: 4px; padding: 6px; }
+  .wallet-dock .viewtab { font-size: 12px; }
+  .wallet-dock-mark { width: 54px; height: 54px; }
 }

@@ -100,10 +100,15 @@
   function collectionSnapshot(cache, collection) {
     return {
       docs: (cache[collection] || []).map(function (row) {
-        var copy = Object.assign({}, row);
-        return { id: copy.id, data: function () { return Object.assign({}, copy); } };
+        var copy = JSON.parse(JSON.stringify(row));
+        return { id: copy.id, data: function () { return JSON.parse(JSON.stringify(copy)); } };
       })
     };
+  }
+
+  function settingsSnapshot(cache) {
+    var copy = JSON.stringify(cache.settings || {});
+    return { exists: true, data: function () { return JSON.parse(copy); } };
   }
 
   function makeApiDb(initial) {
@@ -111,23 +116,28 @@
     var collectionListeners = [];
     var settingsListeners = [];
     var timer = null;
-    var refreshing = false;
+    var refreshPromise = null;
 
     function notify() {
       collectionListeners.slice().forEach(function (item) {
+        var signature = JSON.stringify(cache[item.collection] || []);
+        if (item.signature === signature) return;
+        item.signature = signature;
         try { item.onData(collectionSnapshot(cache, item.collection)); }
         catch (e) { if (item.onError) item.onError(e); }
       });
       settingsListeners.slice().forEach(function (item) {
-        try { item.onData({ exists: true, data: function () { return Object.assign({}, cache.settings || {}); } }); }
+        var signature = JSON.stringify(cache.settings || {});
+        if (item.signature === signature) return;
+        item.signature = signature;
+        try { item.onData(settingsSnapshot(cache)); }
         catch (e) { if (item.onError) item.onError(e); }
       });
     }
 
     function refresh() {
-      if (refreshing) return Promise.resolve(cache);
-      refreshing = true;
-      return request("/api/state", { method: "GET" }).then(function (next) {
+      if (refreshPromise) return refreshPromise;
+      refreshPromise = request("/api/state", { method: "GET" }).then(function (next) {
         cache = next || {};
         notify();
         return cache;
@@ -140,7 +150,8 @@
         collectionErrors.forEach(function (x) { if (x.onError) x.onError(err); });
         settingsErrors.forEach(function (x) { if (x.onError) x.onError(err); });
         throw err;
-      }).finally(function () { refreshing = false; });
+      }).finally(function () { refreshPromise = null; });
+      return refreshPromise;
     }
 
     function startPolling() {
@@ -149,23 +160,38 @@
     }
 
     function afterWrite(result) {
-      return refresh().catch(function () {}).then(function () { return result; });
+      // Поточний GET міг початися до запису: після нього потрібен свіжий стан.
+      return (refreshPromise || Promise.resolve()).catch(function () {})
+        .then(refresh).catch(function () {}).then(function () { return result; });
+    }
+
+    function stopUnusedPolling() {
+      if (timer && !collectionListeners.length && !settingsListeners.length) {
+        clearInterval(timer);
+        timer = null;
+      }
     }
 
     function listenCollection(collection, onData, onError) {
-      var item = { collection: collection, onData: onData, onError: onError };
+      var item = { collection: collection, onData: onData, onError: onError, signature: JSON.stringify(cache[collection] || []) };
       collectionListeners.push(item);
       onData(collectionSnapshot(cache, collection));
       startPolling();
-      return function () { collectionListeners = collectionListeners.filter(function (x) { return x !== item; }); };
+      return function () {
+        collectionListeners = collectionListeners.filter(function (x) { return x !== item; });
+        stopUnusedPolling();
+      };
     }
 
     function listenSettings(onData, onError) {
-      var item = { onData: onData, onError: onError };
+      var item = { onData: onData, onError: onError, signature: JSON.stringify(cache.settings || {}) };
       settingsListeners.push(item);
-      onData({ exists: true, data: function () { return Object.assign({}, cache.settings || {}); } });
+      onData(settingsSnapshot(cache));
       startPolling();
-      return function () { settingsListeners = settingsListeners.filter(function (x) { return x !== item; }); };
+      return function () {
+        settingsListeners = settingsListeners.filter(function (x) { return x !== item; });
+        stopUnusedPolling();
+      };
     }
 
     function collection(name) {
