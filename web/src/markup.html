@@ -25,13 +25,14 @@
         <button class="viewtab active" data-view="main" role="tab" aria-selected="true">Місяць</button>
         <button class="viewtab" data-view="plan" role="tab" aria-selected="false">Плани</button>
         <button class="viewtab" data-view="year" role="tab" aria-selected="false">Рік</button>
+        <button class="viewtab" data-view="cabinet" role="tab" aria-selected="false">Кабінет</button>
         <button class="viewtab" data-view="settings" role="tab" aria-selected="false">Налаштування</button>
       </nav>
       <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
     </div>
   </div>
 
-  <div class="backup-nudge" id="backupNudge" hidden>
+  <div class="backup-nudge" id="backupNudge" hidden aria-hidden="true">
     <span>Тиждень без резервної копії. Зберегти?</span>
     <button class="btn" type="button" id="nudgeSave">Зберегти копію</button>
     <button class="icon-btn" type="button" id="nudgeDismiss" aria-label="Пізніше">✕</button>
@@ -195,7 +196,7 @@
 
   <section class="view" id="view-plan" hidden>
     <div class="grid-2">
-      <section class="panel">
+      <section class="panel" id="settings-monthly-plan">
         <div class="panel-head"><h2>Регулярні</h2><button class="btn" type="button" id="addRecBtn">+ платіж</button></div>
         <form id="recForm" class="stack-form" hidden>
           <input type="text" name="name" placeholder="Назва" maxlength="60" required />
@@ -208,7 +209,7 @@
         <div id="recList"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="settings-limits">
         <div class="panel-head"><h2>Амортизація</h2><button class="btn" type="button" id="addAmBtn">+ витрата</button></div>
         <p class="panel-note">Рідкі великі витрати, розкидані по місяцях.</p>
         <form id="amForm" class="stack-form" hidden>
@@ -220,7 +221,7 @@
         <div id="amList"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="settings-categories">
         <div class="panel-head"><h2>Борги</h2><button class="btn" type="button" id="addDebtBtn">+ борг</button></div>
         <p class="panel-note">Окремо від витрат — у статистику не йдуть.</p>
         <form id="debtForm" class="stack-form" hidden>
@@ -241,7 +242,7 @@
 
   <section class="view" id="view-settings" hidden>
     <div class="grid-2">
-      <section class="panel">
+      <section class="panel" id="settings-navar">
         <div class="panel-head"><h2>Місячний план</h2><span class="panel-note">ЗП і дні надходження</span></div>
         <label class="setting-row"><span>Місячний план</span>
           <input type="checkbox" id="salaryPlanEnabled" /></label>
@@ -252,7 +253,7 @@
         <div class="setting-note" id="salaryPlanNote"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="settings-security">
         <div class="panel-head"><h2>Тиждень</h2><span class="panel-note">План, резерв і денні ліміти</span></div>
         <label class="setting-row"><span>Сьогодні можна</span>
           <input type="checkbox" id="allowanceEnabled" /></label>
@@ -295,16 +296,33 @@
         <label class="setting-row"><span>PIN на вхід</span>
           <input type="text" id="pinSet" inputmode="numeric" maxlength="12" placeholder="порожньо = вимкнено" /></label>
         <div class="setting-actions">
-          <button class="btn" type="button" id="btnBackup">Зберегти копію</button>
-          <button class="btn" type="button" id="btnExportAccount">Експорт акаунта</button>
           <button class="btn" type="button" id="btnCsv">Експорт у CSV</button>
-          <button class="btn" type="button" id="btnRestore">Відновити з копії</button>
           <button class="btn" type="button" id="btnDeleteAccount">Видалити акаунт</button>
+          <button class="btn" type="button" id="btnBackup" hidden>Зберегти копію</button>
+          <button class="btn" type="button" id="btnExportAccount" hidden>Експорт акаунта</button>
+          <button class="btn" type="button" id="btnRestore" hidden>Відновити з копії</button>
           <input type="file" id="restoreFile" accept="application/json,.json" hidden />
         </div>
         <div class="records" id="recordsBox"></div>
       </section>
     </div>
+  </section>
+
+  <section class="view" id="view-cabinet" hidden>
+    <section class="panel cabinet-panel">
+      <div class="cabinet-profile" id="cabinetProfile">
+        <div class="cabinet-avatar" id="cabinetAvatar">К</div>
+        <div><h2 id="cabinetName">Користувач</h2><p class="panel-note" id="cabinetSince" hidden></p></div>
+      </div>
+      <div class="cabinet-menu">
+        <button class="cabinet-row" type="button" data-cabinet-target="security">Захист входу <span>›</span></button>
+        <button class="cabinet-row" type="button" data-cabinet-target="categories">Категорії <span>›</span></button>
+        <button class="cabinet-row" type="button" data-cabinet-target="glossary">Мій словник <span>›</span></button>
+        <button class="cabinet-row" type="button" data-cabinet-target="limits">Ліміти <span>›</span></button>
+        <button class="cabinet-row" type="button" data-cabinet-target="quick">Швидкий запис <span>›</span></button>
+      </div>
+      <p class="cabinet-support">Питання? <a href="https://t.me/mriya7" id="cabinetSupport">Напишіть у підтримку</a></p>
+    </section>
   </section>
 
   <footer class="note">

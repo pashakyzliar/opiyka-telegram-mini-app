@@ -2580,6 +2580,33 @@
     refreshExpenseLabels();
   }
 
+  function showCabinetProfile() {
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || (window.KOPIYKA_TELEGRAM && window.KOPIYKA_TELEGRAM.user) || {};
+    var name = String(user.first_name || "Користувач").trim() || "Користувач";
+    var avatar = document.getElementById("cabinetAvatar");
+    var nameEl = document.getElementById("cabinetName");
+    if (nameEl) nameEl.textContent = name;
+    if (avatar) {
+      avatar.textContent = name.slice(0, 1).toLocaleUpperCase("uk-UA");
+      if (user.photo_url) { avatar.style.backgroundImage = "url(" + String(user.photo_url).replace(/[\"\\\\]/g, "") + ")"; avatar.textContent = ""; }
+    }
+    if (!tg || !tg.initData) return;
+    fetch("/api/profile", { headers: { "X-Telegram-Init-Data": tg.initData, "Accept": "application/json" } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (profile) {
+        if (!profile) return;
+        if (nameEl) nameEl.textContent = profile.firstName || name;
+        if (avatar && profile.photoUrl) { avatar.style.backgroundImage = "url(" + String(profile.photoUrl).replace(/[\"\\\\]/g, "") + ")"; avatar.textContent = ""; }
+        var since = document.getElementById("cabinetSince");
+        if (since && profile.since) {
+          var date = new Date(profile.since + "T00:00:00");
+          since.textContent = "з нами з " + date.toLocaleDateString("uk-UA", { month: "2-digit", year: "numeric" });
+          since.hidden = false;
+        }
+      }).catch(function () {});
+  }
+
   function wire() {
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
@@ -2644,7 +2671,8 @@
           t.classList.toggle("active", on); t.setAttribute("aria-selected", on ? "true" : "false");
         });
         function swap() {
-          ["main", "year", "plan", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
+          ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
+          if (state.view === "cabinet") showCabinetProfile();
           renderAll();
         }
         // A second transition started while one is still running rejects with
@@ -2662,6 +2690,29 @@
           if (vt && vt.ready && vt.ready.catch) vt.ready.catch(function () {});
         } else swap();
       });
+    });
+
+    document.querySelectorAll("[data-cabinet-target]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var target = button.dataset.cabinetTarget;
+        if (target === "glossary" || target === "quick") return;
+        state.view = "settings";
+        document.querySelectorAll(".viewtab").forEach(function (tab) {
+          var on = tab.dataset.view === "settings";
+          tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== "settings"; });
+        var map = { security: "settings-security", categories: "settings-categories", limits: "settings-limits" };
+        var el = document.getElementById(map[target]);
+        if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+      });
+    });
+    var support = document.getElementById("cabinetSupport");
+    if (support) support.addEventListener("click", function (event) {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (!tg || !tg.openTelegramLink) return;
+      event.preventDefault();
+      tg.openTelegramLink("https://t.me/mriya7");
     });
 
     // recurring

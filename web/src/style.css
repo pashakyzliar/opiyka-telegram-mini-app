@@ -743,6 +743,16 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .setting-row input[type="text"] { width: 140px; }
 .setting-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .setting-note { margin-top: 12px; font-size: 11px; color: var(--ink-muted); line-height: 1.5; }
+.cabinet-panel { max-width: 620px; margin: 0 auto; }
+.cabinet-profile { display:flex; align-items:center; gap:14px; padding:4px 0 18px; border-bottom:1px solid var(--hair); }
+.cabinet-profile h2 { margin:0 0 4px; }
+.cabinet-profile p { margin:0; }
+.cabinet-avatar { width:56px; height:56px; flex:0 0 56px; border-radius:50%; overflow:hidden; display:grid; place-items:center; background:var(--foil); color:var(--ink); font-size:23px; font-weight:700; background-size:cover; background-position:center; }
+.cabinet-menu { padding:8px 0; }
+.cabinet-row { width:100%; display:flex; justify-content:space-between; align-items:center; border:0; border-bottom:1px solid var(--hair); background:transparent; color:var(--ink); padding:15px 2px; text-align:left; font:inherit; cursor:pointer; }
+.cabinet-row span { color:var(--ink-muted); font-size:24px; line-height:14px; }
+.cabinet-support { margin:18px 2px 0; color:var(--ink-muted); font-size:12px; }
+.cabinet-support a { color:var(--ink); }
 .expense-cat-form {
   align-items: center;
   padding-bottom: 12px;

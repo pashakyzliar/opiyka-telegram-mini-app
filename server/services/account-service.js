@@ -42,6 +42,10 @@ async function getState(client, userId) {
   return repository.getAccountState(client, userId);
 }
 
+async function getProfile(client, userId) {
+  return repository.getProfile(client, userId);
+}
+
 async function updateSettings(client, userId, payload, requestId) {
   const patch = sanitizeSettingsPatch(payload);
   const current = await repository.getAccountState(client, userId);
@@ -122,6 +126,7 @@ async function deleteAccount(client, userId, payload, requestId) {
 
 module.exports = {
   getState,
+  getProfile,
   updateSettings,
   replaceAll,
   createCollectionRow,

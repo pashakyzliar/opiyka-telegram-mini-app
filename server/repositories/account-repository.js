@@ -311,6 +311,17 @@ async function getAccountState(client, userId) {
   };
 }
 
+async function getProfile(client, userId) {
+  const result = await client.query(
+    `SELECT MIN(tx_date) AS since
+     FROM transactions
+     WHERE user_id = $1`,
+    [userId]
+  );
+  const since = result.rows[0] && result.rows[0].since;
+  return { since: since ? since.toISOString().slice(0, 10) : null };
+}
+
 async function insertTransaction(client, userId, row, extraData) {
   const categoryId = await getCategoryId(client, userId, row.type === "income" ? "income" : "expense", row.category, 0);
   const walletId = await getWalletId(client, userId, row.wallet);
@@ -692,6 +703,7 @@ async function writeAuditEvent(client, userId, eventType, requestId, details) {
 }
 
 module.exports = {
+  getProfile,
   ensureScaffold,
   getAccountState,
   getCollectionRow,

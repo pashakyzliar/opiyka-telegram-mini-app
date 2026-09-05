@@ -433,6 +433,15 @@ async function api(req, res, pathname) {
     return json(res, 200, state);
   }
 
+  if (req.method === "GET" && pathname === "/api/profile") {
+    const profile = await withUserContext(auth.telegramKey, false, (client, userId) => accountService.getProfile(client, userId));
+    return json(res, 200, {
+      firstName: auth.firstName || "Користувач",
+      photoUrl: auth.photoUrl || "",
+      since: profile.since
+    });
+  }
+
   if (req.method === "GET" && pathname === "/api/export") {
     const payload = await withUserContext(auth.telegramKey, true, (client, userId) => accountService.exportAccount(client, userId, reqId));
     return json(res, 200, payload, {
