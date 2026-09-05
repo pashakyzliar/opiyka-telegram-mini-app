@@ -1979,8 +1979,17 @@
     var s = settings();
     if (!s.pin || !s.lockEnabled) { document.getElementById("pinGate").hidden = true; return; }
     if (sessionStorage.getItem("kopiyka_unlocked") === "1") { document.getElementById("pinGate").hidden = true; return; }
+    biometricAttempted = false;
+    if (localStorage.getItem("kopiyka_lock_mode") === "biometric") {
+      document.getElementById("pinGate").hidden = true;
+      tryBiometricUnlock(showPinGate);
+      return;
+    }
+    showPinGate();
+  }
+
+  function showPinGate() {
     document.getElementById("pinGate").hidden = false;
-    if (localStorage.getItem("kopiyka_lock_mode") === "biometric") tryBiometricUnlock();
     setTimeout(function () { document.getElementById("pinInput").focus(); }, 60);
   }
 
@@ -1991,23 +2000,23 @@
     if (!bio) return "Біометрія";
     return bio.biometricType === "face" ? "Face ID" : bio.biometricType === "finger" ? "Відбиток пальця" : "Біометрія";
   }
-  function tryBiometricUnlock() {
+  function tryBiometricUnlock(onFallback) {
     if (biometricAttempted) return;
     biometricAttempted = true;
     var tg = window.Telegram && window.Telegram.WebApp;
     var bio = tg && tg.BiometricManager;
-    if (!bio || !bio.init) return;
+    if (!bio || !bio.init) { if (onFallback) onFallback(); return; }
     try {
       bio.init(function () {
-        if (!bio.isBiometricAvailable || !bio.authenticate) return;
+        if (!bio.isBiometricAvailable || !bio.authenticate) { if (onFallback) onFallback(); return; }
         bio.authenticate({ reason: "Доступ до Копійки" }, function (ok) {
-          if (!ok) return;
+          if (!ok) { if (onFallback) onFallback(); return; }
           sessionStorage.setItem("kopiyka_unlocked", "1");
           document.getElementById("pinGate").hidden = true;
           focusAmount();
         });
       });
-    } catch (_error) {}
+    } catch (_error) { if (onFallback) onFallback(); }
   }
 
   /* ============================ AI (sample) ============================ */
@@ -2600,13 +2609,33 @@
     });
   }
 
-  function renderAll() {
+  function renderAllNow() {
     dropMonthCache();
-    var steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
-      renderTrend, renderLedger, renderRecurring, renderAmortize,
-      renderDebts, renderRecords, renderTicker, renderYear, renderPresets, renderSettings, syncSearchCats];
+    var steps;
+    if (state.view === "main") {
+      steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
+        renderTrend, renderLedger, renderDebts, renderTicker, renderPresets, syncSearchCats];
+    } else if (state.view === "year") {
+      steps = [renderYear];
+    } else if (state.view === "plan") {
+      steps = [renderRecurring, renderAmortize, renderDebts];
+    } else if (state.view === "settings") {
+      steps = [renderSettings];
+    } else {
+      steps = [];
+    }
     steps.forEach(function (fn) { fn(); });
-    refreshExpenseLabels();
+    if (state.view === "main") refreshExpenseLabels();
+  }
+
+  var renderQueued = false;
+  function renderAll() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(function () {
+      renderQueued = false;
+      renderAllNow();
+    });
   }
 
   function showCabinetProfile() {
@@ -2706,6 +2735,58 @@
     }).catch(function (error) { detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><div class="empty-note">Не вдалося відкрити словник.</div>'; document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; }; reportFailure("словник", error); });
   }
 
+  var quickTokenForSession = "";
+  function copyQuickValue(value) {
+    if (!navigator.clipboard || !navigator.clipboard.writeText) return Promise.reject(new Error("clipboard_unavailable"));
+    return navigator.clipboard.writeText(value).then(function () { showError("Швидкий запис", "Скопійовано."); });
+  }
+
+  function showCabinetQuick() {
+    var menu = document.querySelector(".cabinet-menu");
+    var detail = document.getElementById("cabinetDetail");
+    var request = window.KOPIYKA_API_REQUEST;
+    if (!menu || !detail || !request) return;
+    menu.hidden = true; detail.hidden = false;
+    detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Швидкий запис з iPhone</h2><div class="empty-note">Завантаження…</div>';
+    document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+    request("/api/quick/token", { method: "GET" }).then(function (data) {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      var ios = !!(tg && tg.platform === "ios");
+      var endpoint = String(data.publicUrl || window.location.origin).replace(/\/$/, "") + "/api/quick";
+      var tokenBox = quickTokenForSession
+        ? '<div class="quick-token"><code id="quickTokenValue">' + esc(quickTokenForSession) + '</code><button class="btn" type="button" id="quickCopyToken">Копіювати</button></div>'
+        : (data.active ? '<p class="setting-note">Токен приховано. Створіть новий, якщо загубили.</p>' : '');
+      var install = ios && quickTokenForSession && data.shortcutIcloudUrl
+        ? '<button class="btn-primary" type="button" id="quickInstall">Додати команду на iPhone</button><p class="setting-note">iOS попередить, що команда звертається до мережі — це нормально.</p>' : '';
+      var platformNote = ios ? '' : '<p class="setting-note">Автоматичне додавання доступне лише в Telegram на iPhone.</p>';
+      detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Швидкий запис з iPhone</h2>' +
+        '<p class="setting-note">Додавайте витрати з віджета, не відкриваючи Telegram. Відповідь і вибір категорії з’являться в чаті з ботом.</p>' +
+        tokenBox + '<button class="btn-primary" type="button" id="quickCreate">Створити новий токен</button>' + install + platformNote +
+        '<details' + (!data.shortcutIcloudUrl ? ' open' : '') + '><summary>Не вийшло? Створити вручну</summary><ol class="quick-instructions"><li>Відкрийте «Команди» / Shortcuts і створіть нову команду.</li><li>Додайте «Запитати текст» / Ask for Input з підказкою «Витрата».</li><li>Додайте «Отримати вміст URL» / Get Contents of URL: <code>' + esc(endpoint) + '</code>.</li><li>Виберіть POST, у Headers додайте <code>X-Quick-Token</code> і вставте токен.</li><li>У JSON Body додайте <code>text</code> зі змінною «Запитаний текст» / Provided Input.</li><li>Додайте «Отримати значення зі словника» / Get Dictionary Value, ключ <code>reply</code>, потім «Показати сповіщення» / Show Notification.</li></ol><button class="btn" type="button" id="quickCopyUrl">Копіювати URL</button></details>' +
+        (data.active ? '<button class="btn" type="button" id="quickRevoke">Відкликати токен</button><p class="setting-note">Після відкликання команду перевстановлювати не треба: замініть значення заголовка X-Quick-Token у її налаштуваннях.</p>' : '') +
+        '<p class="setting-note">На екрані блокування iPhone все одно попросить розблокувати пристрій — це обмеження iOS.</p>';
+      document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+      document.getElementById("quickCreate").onclick = function () {
+        request("/api/quick/token", { method: "POST", body: "{}" }).then(function (created) {
+          quickTokenForSession = created.token || "";
+          showCabinetQuick();
+        }).catch(function (e) { reportFailure("швидкий запис", e); });
+      };
+      var copyToken = document.getElementById("quickCopyToken");
+      if (copyToken) copyToken.onclick = function () { copyQuickValue(quickTokenForSession).catch(function () { showError("Швидкий запис", "Не вдалося скопіювати токен."); }); };
+      document.getElementById("quickCopyUrl").onclick = function () { copyQuickValue(endpoint).catch(function () { showError("Швидкий запис", "Не вдалося скопіювати URL."); }); };
+      var installButton = document.getElementById("quickInstall");
+      if (installButton) installButton.onclick = function () {
+        copyQuickValue(quickTokenForSession).then(function () {
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+          tg.openLink(data.shortcutIcloudUrl);
+        }).catch(function () { showError("Швидкий запис", "Спочатку скопіюйте токен кнопкою вище."); });
+      };
+      var revoke = document.getElementById("quickRevoke");
+      if (revoke) revoke.onclick = function () { confirmBox("Відкликати токен? Стара команда перестане працювати.").then(function (ok) { if (!ok) return; request("/api/quick/token", { method: "DELETE" }).then(function () { quickTokenForSession = ""; showCabinetQuick(); }).catch(function (e) { reportFailure("швидкий запис", e); }); }); };
+    }).catch(function (e) { reportFailure("швидкий запис", e); });
+  }
+
   function wire() {
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
@@ -2796,7 +2877,7 @@
         var target = button.dataset.cabinetTarget;
         if (target === "security") { showCabinetSecurity(); return; }
         if (target === "glossary") { showCabinetGlossary(); return; }
-        if (target === "quick") return;
+        if (target === "quick") { showCabinetQuick(); return; }
         state.view = "settings";
         document.querySelectorAll(".viewtab").forEach(function (tab) {
           var on = tab.dataset.view === "settings";

@@ -757,6 +757,10 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .cabinet-choice { display:block; padding:13px 2px; border-bottom:1px solid var(--hair); font-size:13px; }
 .glossary-row { display:grid; grid-template-columns:minmax(0,1fr) 130px auto auto; gap:7px; align-items:center; padding:10px 0; border-bottom:1px solid var(--hair); font-size:12px; }
 .glossary-row small { display:block; margin-top:3px; color:var(--ink-muted); }
+.quick-token { display:flex; gap:8px; align-items:center; margin:12px 0; padding:9px; border:1px solid var(--hair); border-radius:10px; overflow:hidden; }
+.quick-token code { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.quick-instructions { padding-left:20px; font-size:12px; line-height:1.55; color:var(--ink-soft); }
+.cabinet-detail-title + .setting-note { margin-top:0; }
 @media (max-width:720px) { .glossary-row { grid-template-columns:minmax(0,1fr) auto auto; } .glossary-row select { grid-column:1 / -1; } }
 .expense-cat-form {
   align-items: center;

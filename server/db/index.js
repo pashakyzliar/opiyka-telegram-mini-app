@@ -52,6 +52,14 @@ async function withUserContext(telegramKey, writable, fn) {
   });
 }
 
+async function withUserIdContext(userId, writable, fn) {
+  return withTransaction(async (client) => {
+    await client.query("SELECT set_config('app.current_user_id', $1, true)", [userId]);
+    if (writable) await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [userId]);
+    return fn(client, userId);
+  });
+}
+
 function mapDbError(error) {
   if (error && error.code === "23505") return appError(409, "conflict", "Record already exists");
   if (error && error.code === "42501") return appError(403, "forbidden", "Access denied");
@@ -72,6 +80,7 @@ module.exports = {
   getPool,
   withTransaction,
   withUserContext,
+  withUserIdContext,
   mapDbError,
   closePool
 };

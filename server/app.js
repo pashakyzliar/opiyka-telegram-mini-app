@@ -13,7 +13,7 @@ const { authenticatedUser, pseudonymizeTelegramId } = require("./auth/telegram")
 const { json, errorJson, corsHeaders, bodyJson } = require("./lib/http");
 const { isAppError } = require("./lib/errors");
 const { COLLECTIONS } = require("./lib/state");
-const { withUserContext, mapDbError } = require("./db");
+const { withTransaction, withUserContext, withUserIdContext, mapDbError } = require("./db");
 const accountService = require("./services/account-service");
 
 const WEB_ROOT = path.resolve(__dirname, "..", "web");
@@ -159,6 +159,7 @@ function categoryMarkup(categories, txId, offset) {
 async function botCreateTransaction(telegramId, payload) {
   const auth = { telegramKey: pseudonymizeTelegramId(telegramId) };
   return withUserContext(auth.telegramKey, true, async (client, userId) => {
+    await accountService.bindTelegramChat(client, userId, telegramId);
     const id = await accountService.createCollectionRow(client, userId, "transactions", payload);
     const state = await accountService.getState(client, userId);
     return state.transactions.find((row) => row.id === id) || Object.assign({}, payload, { id });
@@ -178,7 +179,26 @@ async function botRemoveTransaction(telegramId, txId) {
 
 async function botAccountState(telegramId) {
   const auth = { telegramKey: pseudonymizeTelegramId(telegramId) };
-  return withUserContext(auth.telegramKey, false, (client, userId) => accountService.getState(client, userId));
+  return withUserContext(auth.telegramKey, true, async (client, userId) => {
+    await accountService.bindTelegramChat(client, userId, telegramId);
+    return accountService.getState(client, userId);
+  });
+}
+
+function quickHash(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+async function quickAuth(req) {
+  const token = String(req.headers["x-quick-token"] || "").trim();
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) return null;
+  const hash = quickHash(token);
+  const found = await withTransaction((client) => accountService.findQuickToken(client, hash));
+  if (!found || !found.stored_hash) return null;
+  const actual = Buffer.from(String(found.stored_hash));
+  const expected = Buffer.from(hash);
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+  return found;
 }
 
 async function botGlossary(telegramId) {
@@ -435,13 +455,34 @@ async function api(req, res, pathname) {
 
   const reqId = requestId();
 
+  if (req.method === "GET" && pathname === "/api/quick/token") {
+    const active = await withUserContext(auth.telegramKey, false, (client, userId) => accountService.quickTokenStatus(client, userId));
+    return json(res, 200, { active, shortcutIcloudUrl: config.shortcutIcloudUrl, publicUrl: config.publicUrl });
+  }
+
+  if (req.method === "POST" && pathname === "/api/quick/token") {
+    const token = await withUserContext(auth.telegramKey, true, async (client, userId) => {
+      await accountService.bindTelegramChat(client, userId, auth.telegramId);
+      return accountService.generateQuickToken(client, userId);
+    });
+    return json(res, 200, { token, shortcutIcloudUrl: config.shortcutIcloudUrl, publicUrl: config.publicUrl });
+  }
+
+  if (req.method === "DELETE" && pathname === "/api/quick/token") {
+    await withUserContext(auth.telegramKey, true, (client, userId) => accountService.revokeQuickToken(client, userId));
+    return json(res, 200, { ok: true });
+  }
+
   if (req.method === "GET" && pathname === "/api/state") {
     const state = await withUserContext(auth.telegramKey, false, (client, userId) => accountService.getState(client, userId));
     return json(res, 200, state);
   }
 
   if (req.method === "GET" && pathname === "/api/profile") {
-    const profile = await withUserContext(auth.telegramKey, false, (client, userId) => accountService.getProfile(client, userId));
+    const profile = await withUserContext(auth.telegramKey, true, async (client, userId) => {
+      await accountService.bindTelegramChat(client, userId, auth.telegramId);
+      return accountService.getProfile(client, userId);
+    });
     return json(res, 200, {
       firstName: auth.firstName || "Користувач",
       photoUrl: auth.photoUrl || "",
@@ -547,6 +588,26 @@ async function api(req, res, pathname) {
   return errorJson(res, 405, "method_not_allowed", "Method not allowed");
 }
 
+async function quickApi(req, res) {
+  const auth = await quickAuth(req);
+  if (!auth || !auth.user_id || !auth.telegram_chat_id) return errorJson(res, 401, "unauthorized", "Quick token is invalid or Telegram chat is not linked");
+  const payload = await bodyJson(req, 16 * 1024);
+  const text = String(payload && payload.text || "").trim();
+  const clientId = String(payload && payload.clientId || "").trim();
+  if (!text || text.length > 1000) return errorJson(res, 400, "bad_request", "Text is required");
+  if (clientId && !/^[A-Za-z0-9_-]{1,80}$/.test(clientId)) return errorJson(res, 400, "bad_request", "clientId is invalid");
+  const rate = await withUserIdContext(auth.user_id, true, (client, userId) => accountService.registerQuickRequest(client, userId, clientId));
+  if (!rate.allowed) return errorJson(res, 429, "rate_limited", "Зачекайте кілька секунд або спробуйте пізніше.");
+  if (rate.duplicate) return json(res, 200, { ok: true, reply: "Запит уже прийнято. Перевірте чат із ботом." });
+  try {
+    await handleBotWrite({ text, from: { id: String(auth.telegram_chat_id) }, chat: { id: String(auth.telegram_chat_id), type: "private" } });
+    return json(res, 200, { ok: true, reply: "Запис оброблено. Деталі — у чаті з ботом." });
+  } catch (error) {
+    const status = error.code === "rate_limited" ? 429 : error.code === "not_granted" ? 503 : 502;
+    return errorJson(res, status, error.code || "quick_write_failed", error.message || "Не вдалося додати витрату");
+  }
+}
+
 function createAppServer() {
   return http.createServer(async (req, res) => {
     corsHeaders(res, config.corsOrigin);
@@ -557,6 +618,7 @@ function createAppServer() {
     const url = new URL(req.url, "http://localhost");
     try {
       if (url.pathname === "/health") return json(res, 200, { ok: true });
+      if (url.pathname === "/api/quick" && req.method === "POST") return await quickApi(req, res);
       if (url.pathname.startsWith("/api/")) return await api(req, res, url.pathname);
       if (req.method !== "GET" && req.method !== "HEAD") return errorJson(res, 405, "method_not_allowed", "Method not allowed");
       return await staticFile(res, url.pathname);

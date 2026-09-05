@@ -323,6 +323,40 @@ async function getProfile(client, userId) {
   return { since: since ? since.toISOString().slice(0, 10) : null };
 }
 
+async function bindTelegramChat(client, userId, telegramId) {
+  if (!/^\d{1,20}$/.test(String(telegramId || ""))) return;
+  await client.query(
+    "UPDATE users SET telegram_chat_id = $2::bigint WHERE id = $1 AND telegram_chat_id IS DISTINCT FROM $2::bigint",
+    [userId, telegramId]
+  );
+}
+
+async function setQuickToken(client, userId, hash) {
+  await client.query("UPDATE users SET quick_token_hash = $2, quick_token_created_at = CASE WHEN $2 IS NULL THEN NULL ELSE now() END WHERE id = $1", [userId, hash || null]);
+}
+
+async function quickTokenStatus(client, userId) {
+  const result = await client.query("SELECT quick_token_hash IS NOT NULL AS active FROM users WHERE id = $1", [userId]);
+  return !!(result.rows[0] && result.rows[0].active);
+}
+
+async function findQuickToken(client, hash) {
+  const result = await client.query("SELECT * FROM public.find_user_by_quick_token_hash($1)", [hash]);
+  return result.rows[0] || null;
+}
+
+async function registerQuickRequest(client, userId, clientId) {
+  await client.query("DELETE FROM quick_request_log WHERE user_id = $1 AND created_at < now() - interval '2 hours'", [userId]);
+  if (clientId) {
+    const duplicate = await client.query("SELECT 1 FROM quick_request_log WHERE user_id = $1 AND client_id = $2 AND created_at >= now() - interval '1 hour'", [userId, clientId]);
+    if (duplicate.rows.length) return { duplicate: true, allowed: true };
+  }
+  const count = await client.query("SELECT count(*)::integer AS count FROM quick_request_log WHERE user_id = $1 AND created_at >= now() - interval '1 hour'", [userId]);
+  if (Number(count.rows[0].count) >= 60) return { duplicate: false, allowed: false };
+  await client.query("INSERT INTO quick_request_log (user_id, client_id) VALUES ($1, NULLIF($2, ''))", [userId, clientId || ""]);
+  return { duplicate: false, allowed: true };
+}
+
 async function glossaryMap(client, userId) {
   const result = await client.query(
     `SELECT g.word, c.name
@@ -789,6 +823,11 @@ async function writeAuditEvent(client, userId, eventType, requestId, details) {
 
 module.exports = {
   getProfile,
+  bindTelegramChat,
+  setQuickToken,
+  quickTokenStatus,
+  findQuickToken,
+  registerQuickRequest,
   glossaryMap,
   incrementGlossaryHit,
   listGlossary,

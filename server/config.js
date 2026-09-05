@@ -42,6 +42,7 @@ module.exports = {
   port: numberEnv("PORT", 3000),
   botToken: String(process.env.BOT_TOKEN || ""),
   publicUrl: String(process.env.PUBLIC_URL || "").replace(/\/$/, ""),
+  shortcutIcloudUrl: String(process.env.SHORTCUT_ICLOUD_URL || "").trim(),
   corsOrigin: String(process.env.CORS_ORIGIN || ""),
   allowDevAuth: booleanEnv("ALLOW_DEV_AUTH", false) && process.env.NODE_ENV !== "production",
   devUserId: String(process.env.DEV_USER_ID || "local"),

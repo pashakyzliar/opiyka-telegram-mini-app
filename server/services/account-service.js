@@ -3,6 +3,7 @@
 const repository = require("../repositories/account-repository");
 const { appError } = require("../lib/errors");
 const botAi = require("../bot-ai");
+const crypto = require("node:crypto");
 const {
   COLLECTIONS,
   defaultSettings,
@@ -46,6 +47,17 @@ async function getState(client, userId) {
 async function getProfile(client, userId) {
   return repository.getProfile(client, userId);
 }
+
+async function bindTelegramChat(client, userId, telegramId) { return repository.bindTelegramChat(client, userId, telegramId); }
+async function generateQuickToken(client, userId) {
+  const token = crypto.randomBytes(24).toString("base64url");
+  await repository.setQuickToken(client, userId, crypto.createHash("sha256").update(token).digest("hex"));
+  return token;
+}
+async function revokeQuickToken(client, userId) { return repository.setQuickToken(client, userId, ""); }
+async function quickTokenStatus(client, userId) { return repository.quickTokenStatus(client, userId); }
+async function findQuickToken(client, hash) { return repository.findQuickToken(client, hash); }
+async function registerQuickRequest(client, userId, clientId) { return repository.registerQuickRequest(client, userId, clientId); }
 
 function normalizeGlossaryInput(word) {
   const raw = String(word || "").replace(/[^\p{L}-]+/gu, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
@@ -155,6 +167,12 @@ async function deleteAccount(client, userId, payload, requestId) {
 module.exports = {
   getState,
   getProfile,
+  bindTelegramChat,
+  generateQuickToken,
+  revokeQuickToken,
+  quickTokenStatus,
+  findQuickToken,
+  registerQuickRequest,
   listGlossary,
   glossaryCategories,
   glossaryMap,

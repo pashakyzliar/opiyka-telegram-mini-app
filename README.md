@@ -142,6 +142,7 @@ AI variables, якщо AI увімкнений:
 - `INIT_DATA_MAX_AGE=900`
 - `INIT_DATA_MAX_FUTURE_SKEW=60`
 - `MAX_BODY_BYTES=2097152`
+- `SHORTCUT_ICLOUD_URL` — необов'язкове iCloud-посилання на еталонну команду iPhone. Залиш порожнім, доки команда не створена на фізичному iPhone; Mini App покаже ручну інструкцію.
 
 Для SQL-режиму не задавай `DATA_FILE`. Volume для `users.json` не потрібен: дані користувачів зберігаються в PostgreSQL сервісі Railway.
 
