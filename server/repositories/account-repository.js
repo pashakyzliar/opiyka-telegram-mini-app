@@ -173,6 +173,7 @@ async function serializeSettings(client, userId) {
       createdAt: new Date(item.created_at).toISOString()
     })),
     calmMode: !!row.calm_mode,
+    lockEnabled: !!row.login_lock_enabled,
     pin: row.pin_hash || "",
     lastBackup: lastBackupMillis(row.last_backup_at),
     streakRecord: row.streak_record || 0,
@@ -530,9 +531,10 @@ async function replaceSettings(client, userId, settings, extraSettings) {
        week_reserve = $6::numeric,
        calm_mode = $7,
        pin_hash = $8,
-       last_backup_at = CASE WHEN $9::bigint > 0 THEN to_timestamp($9::double precision / 1000.0) ELSE NULL END,
-       streak_record = $10,
-       extra_settings = $11::jsonb
+       login_lock_enabled = $9,
+       last_backup_at = CASE WHEN $10::bigint > 0 THEN to_timestamp($10::double precision / 1000.0) ELSE NULL END,
+       streak_record = $11,
+       extra_settings = $12::jsonb
      WHERE user_id = $1`,
     [
       userId,
@@ -543,6 +545,7 @@ async function replaceSettings(client, userId, settings, extraSettings) {
       amountToNumeric(settings.weekReserve, "weekReserve"),
       settings.calmMode,
       settings.pin,
+      settings.lockEnabled && !!settings.pin,
       settings.lastBackup,
       settings.streakRecord,
       JSON.stringify(extraSettings || {})

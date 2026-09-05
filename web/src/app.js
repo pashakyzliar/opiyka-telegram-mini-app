@@ -323,6 +323,7 @@
       weekDaily: [0, 0, 0, 0, 0, 0, 0],
       navarHistory: [],
       calmMode: false,
+      lockEnabled: false,
       pin: "",
       lastBackup: 0,
       streakRecord: 0,
@@ -336,6 +337,7 @@
     s.expenseCategories = normalizeExpenseCategories(s.expenseCategories);
     if (!Array.isArray(s.salaryDays) || !s.salaryDays.length) s.salaryDays = [5, 20];
     s.allowanceEnabled = !!s.allowanceEnabled;
+    s.lockEnabled = !!s.lockEnabled;
     s.salaryAmount = Math.max(0, round2(s.salaryAmount));
     s.salaryPlanEnabled = !!s.salaryPlanEnabled;
     if (!Array.isArray(s.salaryPayments)) s.salaryPayments = [];
@@ -1975,10 +1977,37 @@
   }
   function lockIfNeeded() {
     var s = settings();
-    if (!s.pin) { document.getElementById("pinGate").hidden = true; return; }
+    if (!s.pin || !s.lockEnabled) { document.getElementById("pinGate").hidden = true; return; }
     if (sessionStorage.getItem("kopiyka_unlocked") === "1") { document.getElementById("pinGate").hidden = true; return; }
     document.getElementById("pinGate").hidden = false;
+    if (localStorage.getItem("kopiyka_lock_mode") === "biometric") tryBiometricUnlock();
     setTimeout(function () { document.getElementById("pinInput").focus(); }, 60);
+  }
+
+  var biometricAttempted = false;
+  function biometricLabel() {
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var bio = tg && tg.BiometricManager;
+    if (!bio) return "Біометрія";
+    return bio.biometricType === "face" ? "Face ID" : bio.biometricType === "finger" ? "Відбиток пальця" : "Біометрія";
+  }
+  function tryBiometricUnlock() {
+    if (biometricAttempted) return;
+    biometricAttempted = true;
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var bio = tg && tg.BiometricManager;
+    if (!bio || !bio.init) return;
+    try {
+      bio.init(function () {
+        if (!bio.isBiometricAvailable || !bio.authenticate) return;
+        bio.authenticate({ reason: "Доступ до Копійки" }, function (ok) {
+          if (!ok) return;
+          sessionStorage.setItem("kopiyka_unlocked", "1");
+          document.getElementById("pinGate").hidden = true;
+          focusAmount();
+        });
+      });
+    } catch (_error) {}
   }
 
   /* ============================ AI (sample) ============================ */
@@ -2607,6 +2636,45 @@
       }).catch(function () {});
   }
 
+  function showCabinetSecurity() {
+    var menu = document.querySelector(".cabinet-menu");
+    var detail = document.getElementById("cabinetDetail");
+    if (!menu || !detail) return;
+    menu.hidden = true; detail.hidden = false;
+    var mode = localStorage.getItem("kopiyka_lock_mode") || "pin";
+    var hasPin = !!settings().pin;
+    detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button>' +
+      '<h2 class="cabinet-detail-title">Захист входу</h2>' +
+      '<label class="cabinet-choice"><input type="radio" name="cabinetLock" value="off"' + (!settings().lockEnabled ? ' checked' : '') + '> Вимкнено</label>' +
+      '<label class="cabinet-choice"><input type="radio" name="cabinetLock" value="pin"' + (settings().lockEnabled && mode !== "biometric" ? ' checked' : '') + '> PIN-код</label>' +
+      '<label class="cabinet-choice" id="cabinetBioChoice"><input type="radio" name="cabinetLock" value="biometric"' + (settings().lockEnabled && mode === "biometric" ? ' checked' : '') + '> ' + esc(biometricLabel()) + '</label>' +
+      '<label class="setting-row"><span>PIN-код</span><input type="text" id="cabinetPin" inputmode="numeric" maxlength="12" placeholder="4–12 цифр" value="' + (hasPin ? "••••" : "") + '"></label>' +
+      '<p class="setting-note">Біометрія — локальний замок пристрою. Сервер і далі перевіряє лише підпис Telegram.</p>';
+    var tg = window.Telegram && window.Telegram.WebApp;
+    var bio = tg && tg.BiometricManager;
+    if (!bio || !bio.init) document.getElementById("cabinetBioChoice").hidden = true;
+    document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+    detail.querySelectorAll('input[name="cabinetLock"]').forEach(function (input) {
+      input.onchange = function () {
+        var value = input.value;
+        if (value === "off") { localStorage.removeItem("kopiyka_lock_mode"); saveSettings({ lockEnabled: false }); return; }
+        if (!settings().pin) { showError("Захист входу", "Спершу задайте PIN-код."); input.checked = false; return; }
+        if (value === "biometric") {
+          if (!bio || !bio.init) { showError("Захист входу", "Біометрія недоступна на цьому пристрої."); input.checked = false; return; }
+          try { bio.init(function () { if (!bio.isBiometricAvailable) { showError("Захист входу", "Біометрія недоступна на цьому пристрої."); return; } bio.requestAccess({ reason: "Щоб швидко відкривати Копійку" }, function (granted) { if (granted) { localStorage.setItem("kopiyka_lock_mode", "biometric"); saveSettings({ lockEnabled: true }); } }); }); } catch (_error) {}
+          return;
+        }
+        localStorage.setItem("kopiyka_lock_mode", "pin"); saveSettings({ lockEnabled: true });
+      };
+    });
+    document.getElementById("cabinetPin").onchange = function () {
+      var value = String(this.value).trim();
+      if (value === "••••") return;
+      if (!/^\d{4,12}$/.test(value)) { showError("PIN", "PIN — від 4 до 12 цифр."); return; }
+      hashPin(value).then(function (hash) { saveSettings({ pin: hash, lockEnabled: true }); localStorage.setItem("kopiyka_lock_mode", "pin"); sessionStorage.setItem("kopiyka_unlocked", "1"); });
+    };
+  }
+
   function wire() {
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
@@ -2695,6 +2763,7 @@
     document.querySelectorAll("[data-cabinet-target]").forEach(function (button) {
       button.addEventListener("click", function () {
         var target = button.dataset.cabinetTarget;
+        if (target === "security") { showCabinetSecurity(); return; }
         if (target === "glossary" || target === "quick") return;
         state.view = "settings";
         document.querySelectorAll(".viewtab").forEach(function (tab) {
@@ -2848,7 +2917,7 @@
       if (!v) { saveSettings({ pin: "" }); showError("PIN", "Замок вимкнено."); return; }
       if (!/^\d{4,12}$/.test(v)) { showError("PIN", "PIN — від 4 до 12 цифр."); return; }
       hashPin(v).then(function (h) {
-        saveSettings({ pin: h });
+        saveSettings({ pin: h, lockEnabled: true });
         sessionStorage.setItem("kopiyka_unlocked", "1");
         showError("PIN", "Замок увімкнено. Він ховає екран, але не шифрує дані.");
       });

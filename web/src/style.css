@@ -753,6 +753,8 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .cabinet-row span { color:var(--ink-muted); font-size:24px; line-height:14px; }
 .cabinet-support { margin:18px 2px 0; color:var(--ink-muted); font-size:12px; }
 .cabinet-support a { color:var(--ink); }
+.cabinet-detail-title { margin:18px 0 8px; }
+.cabinet-choice { display:block; padding:13px 2px; border-bottom:1px solid var(--hair); font-size:13px; }
 .expense-cat-form {
   align-items: center;
   padding-bottom: 12px;
