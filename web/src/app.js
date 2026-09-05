@@ -759,38 +759,23 @@
 
   /* ============================ rendering ============================ */
 
-  var animGen = new WeakMap();
   function animateValue(el, from, to, formatFn, negClass) {
     if (!el) return;
-    // The final value lands FIRST, synchronously. Everything below is
-    // decoration painted over an already-correct number: if the tween engine
-    // never ticks (a background tab throttles rAF, GSAP failed to load, an
-    // animation throws) the screen still shows the right sum.
     el.textContent = formatFn(to);
     if (negClass) el.classList.toggle("negative", to < 0);
-    if (state.settings && state.settings.calmMode) return;
-    if (!isFinite(from) || from === to) return;
+  }
 
-    // GSAP drives the count-up when it is there; the rAF loop below is the
-    // fallback for a view where the library did not load.
-    if (window.__motion && window.__motion.tweenNumber) {
-      window.__motion.tweenNumber(el, from, to, formatFn, negClass);
-      return;
+  function renderDashboardDate() {
+    var d = new Date(todayISO() + "T12:00:00");
+    var weekday = document.getElementById("dashboardWeekday");
+    var today = document.getElementById("dashboardToday");
+    var greeting = document.getElementById("dashboardGreeting");
+    if (weekday) weekday.textContent = d.toLocaleDateString("uk-UA", { weekday: "long" });
+    if (today) today.textContent = d.toLocaleDateString("uk-UA", { day: "numeric", month: "long" });
+    if (greeting) {
+      var hour = new Date().getHours();
+      greeting.textContent = hour < 12 ? "Доброго ранку" : hour < 18 ? "Добрий день" : "Добрий вечір";
     }
-    from = isFinite(from) ? from : to;
-    var myGen = (animGen.get(el) || 0) + 1;
-    animGen.set(el, myGen);
-    var start = null, dur = 650;
-    function step(ts) {
-      if (animGen.get(el) !== myGen) return;
-      if (start === null) start = ts;
-      var p = Math.min(1, (ts - start) / dur);
-      var val = from + (to - from) * (1 - Math.pow(1 - p, 3));
-      el.textContent = formatFn(val);
-      if (negClass) el.classList.toggle("negative", val < 0);
-      if (p < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
   }
 
   function renderStats() {
@@ -1204,7 +1189,7 @@
     // Rows slide to their new places instead of jumping — but only when the
     // filter actually changed. Measuring every row on every render made a
     // month switch cost ~75 ms with a full journal.
-    var useFlip = flipPending && window.__motion && window.__motion.flipCapture && !state.settings.calmMode;
+    var useFlip = false;
     flipPending = false;
     if (useFlip) window.__motion.flipCapture(body);
     var list = filteredTx().slice().sort(function (a, b) {
@@ -2611,6 +2596,9 @@
 
   function renderAllNow() {
     dropMonthCache();
+    renderDashboardDate();
+    var monthSwitcher = document.getElementById("monthSwitcher");
+    if (monthSwitcher) monthSwitcher.hidden = state.view !== "main";
     var steps;
     if (state.view === "main") {
       steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
@@ -3158,10 +3146,6 @@
   function introOnce() {
     if (introDone) return;
     introDone = true;
-    if (state.settings.calmMode) return;
-    if (window.__motion && window.__motion.splitReveal) {
-      window.__motion.splitReveal(document.getElementById("allowanceValue"));
-    }
   }
 
   // Форма готова до вводу одразу: курсор у сумі, на телефоні — цифрова
