@@ -2,6 +2,7 @@
 
 const repository = require("../repositories/account-repository");
 const { appError } = require("../lib/errors");
+const botAi = require("../bot-ai");
 const {
   COLLECTIONS,
   defaultSettings,
@@ -44,6 +45,33 @@ async function getState(client, userId) {
 
 async function getProfile(client, userId) {
   return repository.getProfile(client, userId);
+}
+
+function normalizeGlossaryInput(word) {
+  const raw = String(word || "").replace(/[^\p{L}-]+/gu, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  if (raw.length < 2 || raw.length > 32) throw appError(400, "invalid_word", "Word must contain 2–32 letters");
+  const normalized = botAi.normalizeWord(raw);
+  if (!normalized) throw appError(400, "invalid_word", "Word is invalid");
+  return { raw, normalized };
+}
+
+async function listGlossary(client, userId) { return repository.listGlossary(client, userId); }
+async function glossaryCategories(client, userId) { return repository.glossaryCategories(client, userId); }
+async function glossaryMap(client, userId) { return repository.glossaryMap(client, userId); }
+async function incrementGlossaryHit(client, userId, word) { return repository.incrementGlossaryHit(client, userId, word); }
+async function createGlossary(client, userId, payload) {
+  const input = normalizeGlossaryInput(payload && payload.word);
+  const count = await repository.listGlossary(client, userId);
+  if (count.length >= 500 && !count.some((row) => botAi.normalizeWord(row.word) === input.normalized)) throw appError(400, "glossary_limit", "Glossary limit reached");
+  return repository.upsertGlossary(client, userId, input.normalized, input.raw, String(payload && payload.categoryId || ""), "manual");
+}
+async function updateGlossary(client, userId, id, payload) {
+  return repository.updateGlossaryCategory(client, userId, id, String(payload && payload.categoryId || ""));
+}
+async function deleteGlossary(client, userId, id) { return repository.deleteGlossary(client, userId, id); }
+async function learnGlossary(client, userId, rawWord, categoryName) {
+  const input = normalizeGlossaryInput(rawWord);
+  return repository.upsertGlossaryByCategoryName(client, userId, input.normalized, input.raw, categoryName);
 }
 
 async function updateSettings(client, userId, payload, requestId) {
@@ -127,6 +155,14 @@ async function deleteAccount(client, userId, payload, requestId) {
 module.exports = {
   getState,
   getProfile,
+  listGlossary,
+  glossaryCategories,
+  glossaryMap,
+  incrementGlossaryHit,
+  createGlossary,
+  updateGlossary,
+  deleteGlossary,
+  learnGlossary,
   updateSettings,
   replaceAll,
   createCollectionRow,

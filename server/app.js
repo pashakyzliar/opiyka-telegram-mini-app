@@ -181,6 +181,16 @@ async function botAccountState(telegramId) {
   return withUserContext(auth.telegramKey, false, (client, userId) => accountService.getState(client, userId));
 }
 
+async function botGlossary(telegramId) {
+  const auth = { telegramKey: pseudonymizeTelegramId(telegramId) };
+  return withUserContext(auth.telegramKey, false, (client, userId) => accountService.glossaryMap(client, userId));
+}
+
+async function botGlossaryHit(telegramId, word) {
+  const auth = { telegramKey: pseudonymizeTelegramId(telegramId) };
+  return withUserContext(auth.telegramKey, true, (client, userId) => accountService.incrementGlossaryHit(client, userId, word));
+}
+
 async function resolveCategorySelection(telegramId, txId, categoryIndex) {
   const auth = { telegramKey: pseudonymizeTelegramId(telegramId) };
   return withUserContext(auth.telegramKey, true, async (client, userId) => {
@@ -194,13 +204,8 @@ async function resolveCategorySelection(telegramId, txId, categoryIndex) {
       category: category.name,
       pending: false
     });
-    const glossary = Object.assign({}, glossaryForAccount(account));
     const srcWord = String(tx.srcWord || "").trim();
-    const glossaryKey = botAi.normalizeWord(srcWord);
-    if (glossaryKey) {
-      glossary[glossaryKey] = category.name;
-      await accountService.updateSettings(client, userId, { glossary }, requestId());
-    }
+    if (srcWord) await accountService.learnGlossary(client, userId, srcWord, category.name);
     const next = await accountService.getState(client, userId);
     return {
       ok: true,
@@ -232,9 +237,11 @@ async function handleBotWrite(message) {
   const account = await botAccountState(telegramId);
   const categories = expenseCategoriesForAccount(account);
   let rows = [];
-  const quick = botAi.resolveGlossaryWrite(text, glossaryForAccount(account), categories);
+  const glossary = await botGlossary(telegramId);
+  const quick = botAi.resolveGlossaryWrite(text, Object.assign({}, glossaryForAccount(account), glossary), categories);
 
   if (quick) {
+    await botGlossaryHit(telegramId, botAi.normalizeWord(quick.srcWord));
     rows = [quick];
   } else {
     if (!ai.configured()) {
@@ -440,6 +447,34 @@ async function api(req, res, pathname) {
       photoUrl: auth.photoUrl || "",
       since: profile.since
     });
+  }
+
+  if (req.method === "GET" && pathname === "/api/glossary") {
+    const payload = await withUserContext(auth.telegramKey, false, async (client, userId) => ({
+      rows: await accountService.listGlossary(client, userId),
+      categories: await accountService.glossaryCategories(client, userId)
+    }));
+    return json(res, 200, payload);
+  }
+
+  if (req.method === "POST" && pathname === "/api/glossary") {
+    const payload = await bodyJson(req, 16 * 1024);
+    const id = await withUserContext(auth.telegramKey, true, (client, userId) => accountService.createGlossary(client, userId, payload));
+    return json(res, 200, { ok: true, id });
+  }
+
+  const glossaryMatch = pathname.match(/^\/api\/glossary\/(\d+)$/);
+  if (glossaryMatch && req.method === "PATCH") {
+    const payload = await bodyJson(req, 16 * 1024);
+    const ok = await withUserContext(auth.telegramKey, true, (client, userId) => accountService.updateGlossary(client, userId, glossaryMatch[1], payload));
+    if (!ok) return errorJson(res, 404, "not_found", "Glossary entry not found");
+    return json(res, 200, { ok: true });
+  }
+
+  if (glossaryMatch && req.method === "DELETE") {
+    const ok = await withUserContext(auth.telegramKey, true, (client, userId) => accountService.deleteGlossary(client, userId, glossaryMatch[1]));
+    if (!ok) return errorJson(res, 404, "not_found", "Glossary entry not found");
+    return json(res, 200, { ok: true });
   }
 
   if (req.method === "GET" && pathname === "/api/export") {

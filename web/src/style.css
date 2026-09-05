@@ -755,6 +755,9 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .cabinet-support a { color:var(--ink); }
 .cabinet-detail-title { margin:18px 0 8px; }
 .cabinet-choice { display:block; padding:13px 2px; border-bottom:1px solid var(--hair); font-size:13px; }
+.glossary-row { display:grid; grid-template-columns:minmax(0,1fr) 130px auto auto; gap:7px; align-items:center; padding:10px 0; border-bottom:1px solid var(--hair); font-size:12px; }
+.glossary-row small { display:block; margin-top:3px; color:var(--ink-muted); }
+@media (max-width:720px) { .glossary-row { grid-template-columns:minmax(0,1fr) auto auto; } .glossary-row select { grid-column:1 / -1; } }
 .expense-cat-form {
   align-items: center;
   padding-bottom: 12px;

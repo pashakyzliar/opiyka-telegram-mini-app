@@ -2675,6 +2675,37 @@
     };
   }
 
+  function showCabinetGlossary() {
+    var menu = document.querySelector(".cabinet-menu");
+    var detail = document.getElementById("cabinetDetail");
+    var request = window.KOPIYKA_API_REQUEST;
+    if (!menu || !detail || !request) return;
+    menu.hidden = true; detail.hidden = false;
+    detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Мій словник</h2><div class="empty-note">Завантаження…</div>';
+    document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+    request("/api/glossary", { method: "GET" }).then(function (data) {
+      var rows = data.rows || [], cats = data.categories || [];
+      var options = cats.map(function (cat) { return '<option value="' + esc(cat.id) + '">' + esc((cat.icon ? cat.icon + " " : "") + cat.name) + '</option>'; }).join("");
+      detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Мій словник</h2>' +
+        '<form id="glossaryForm" class="stack-form"><input name="word" maxlength="32" placeholder="Слово, наприклад стіки" required><select name="categoryId">' + options + '</select><button class="btn-primary">Додати</button></form>' +
+        '<input type="search" id="glossarySearch" placeholder="Пошук слова" aria-label="Пошук слова"><div id="glossaryList"></div>';
+      document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+      var list = document.getElementById("glossaryList");
+      function render(filter) {
+        var needle = String(filter || "").toLocaleLowerCase("uk-UA");
+        var visible = rows.filter(function (row) { return String(row.word || "").toLocaleLowerCase("uk-UA").includes(needle); });
+        list.innerHTML = visible.length ? visible.map(function (row) {
+          return '<div class="glossary-row" data-glossary-id="' + esc(row.id) + '"><div><b>' + esc(row.word) + '</b> → ' + esc((row.category.icon ? row.category.icon + " " : "") + row.category.name) + '<small>' + (row.source === "learned" ? "вивчено ботом" : "додано вручну") + " · " + row.hits + " разів" + '</small></div><select data-glossary-category>' + cats.map(function (cat) { return '<option value="' + esc(cat.id) + '"' + (cat.id === row.categoryId ? " selected" : "") + '>' + esc(cat.name) + '</option>'; }).join("") + '</select><button class="icon-btn" type="button" data-glossary-save>✎</button><button class="icon-btn" type="button" data-glossary-delete>✕</button></div>';
+        }).join("") : '<div class="empty-note">Словник наповнюється сам, коли бот питає про незнайоме слово.</div>';
+        list.querySelectorAll("[data-glossary-save]").forEach(function (button) { button.onclick = function () { var row = button.closest("[data-glossary-id]"); request("/api/glossary/" + encodeURIComponent(row.dataset.glossaryId), { method: "PATCH", body: JSON.stringify({ categoryId: row.querySelector("[data-glossary-category]").value }) }).then(function () { showCabinetGlossary(); }).catch(function (e) { reportFailure("словник", e); }); }; });
+        list.querySelectorAll("[data-glossary-delete]").forEach(function (button) { button.onclick = function () { var row = button.closest("[data-glossary-id]"); confirmBox("Видалити слово зі словника?").then(function (ok) { if (!ok) return; request("/api/glossary/" + encodeURIComponent(row.dataset.glossaryId), { method: "DELETE" }).then(function () { showCabinetGlossary(); }).catch(function (e) { reportFailure("словник", e); }); }); }; });
+      }
+      render("");
+      document.getElementById("glossarySearch").oninput = function () { render(this.value); };
+      document.getElementById("glossaryForm").onsubmit = function (event) { event.preventDefault(); var fd = new FormData(event.target); request("/api/glossary", { method: "POST", body: JSON.stringify({ word: fd.get("word"), categoryId: fd.get("categoryId") }) }).then(function () { showCabinetGlossary(); }).catch(function (e) { reportFailure("словник", e); }); };
+    }).catch(function (error) { detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><div class="empty-note">Не вдалося відкрити словник.</div>'; document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; }; reportFailure("словник", error); });
+  }
+
   function wire() {
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');
@@ -2764,7 +2795,8 @@
       button.addEventListener("click", function () {
         var target = button.dataset.cabinetTarget;
         if (target === "security") { showCabinetSecurity(); return; }
-        if (target === "glossary" || target === "quick") return;
+        if (target === "glossary") { showCabinetGlossary(); return; }
+        if (target === "quick") return;
         state.view = "settings";
         document.querySelectorAll(".viewtab").forEach(function (tab) {
           var on = tab.dataset.view === "settings";
