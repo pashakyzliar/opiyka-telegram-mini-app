@@ -16,7 +16,7 @@
   var INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
   var WALLETS = ["Кеш"];
  
-  var EXPENSE_ICON_PRESETS = ["🛒", "🍔", "☕", "🍱", "🚗", "⛽", "🚌", "🚕", "🏠", "💡", "📱", "💳", "🚬", "💊", "🏥", "👕", "🎁", "🎉", "🎮", "📦", "🐾", "✈️", "📚", "💈"];
+  var EXPENSE_ICON_PRESETS = ["🛒", "🍔", "🥗", "☕", "🍱", "🍕", "🚗", "⛽", "🚌", "🚕", "🏠", "💡", "💧", "📱", "🌐", "💳", "💸", "🚬", "💊", "🏥", "🧴", "👕", "👟", "🎁", "🎉", "🎮", "📦", "🐾", "✈️", "🏨", "📚", "✂️", "🔧", "👶", "❤️", "🧾"];
 
   var LS_KEY = "kopiyka_v2";
   var COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
@@ -765,6 +765,7 @@
   }
 
   function renderDashboardDate() {
+    var now = new Date();
     var d = new Date(todayISO() + "T12:00:00");
     var weekday = document.getElementById("dashboardWeekday");
     var today = document.getElementById("dashboardToday");
@@ -772,15 +773,21 @@
     if (weekday) weekday.textContent = d.toLocaleDateString("uk-UA", { weekday: "long" });
     if (today) today.textContent = d.toLocaleDateString("uk-UA", { day: "numeric", month: "long" });
     if (greeting) {
-      var hour = new Date().getHours();
-      greeting.textContent = hour < 12 ? "Доброго ранку" : hour < 18 ? "Добрий день" : "Добрий вечір";
+      var hour = now.getHours();
+      if (hour >= 5 && hour < 12) greeting.textContent = "Доброго ранку";
+      else if (hour >= 12 && hour < 18) greeting.textContent = "Доброго дня";
+      else if (hour >= 18 && hour < 22) greeting.textContent = "Доброго вечора";
+      else greeting.textContent = "Доброї ночі";
     }
   }
 
   var calendarDay = todayISO();
   function refreshCalendarDay() {
     var today = todayISO();
-    if (today === calendarDay) return;
+    if (today === calendarDay) {
+      renderDashboardDate();
+      return;
+    }
     if (state.viewMonth === monthKey(calendarDay)) state.viewMonth = monthKey(today);
     calendarDay = today;
     renderAll();
@@ -2277,6 +2284,17 @@
     positionExpenseIconPicker();
   }
 
+  function setExpenseIconTrigger(trigger, rawIcon) {
+    if (!trigger) return;
+    var icon = normalizeExpenseCategoryIcon(rawIcon);
+    trigger.dataset.iconValue = icon;
+    trigger.textContent = icon || "🙂";
+    trigger.classList.toggle("is-empty", !icon);
+    var linkedId = trigger.dataset.iconInputId;
+    var linkedInput = linkedId ? document.getElementById(linkedId) : null;
+    if (linkedInput) linkedInput.value = icon;
+  }
+
   function wireExpenseIconPicker() {
     var picker = document.getElementById("expenseIconPicker");
     if (!picker) return;
@@ -2284,15 +2302,11 @@
       EXPENSE_ICON_PRESETS.map(function (icon) {
         return '<button type="button" data-expense-icon="' + esc(icon) + '" aria-label="Обрати ' + esc(icon) + '">' + esc(icon) + '</button>';
       }).join("") + '</div><button type="button" class="expense-icon-clear" data-expense-icon="">Без емодзі</button>';
-    function isIconInput(target) {
-      return target && target.matches && target.matches('[data-cat-icon], #expenseCategoryForm input[name="icon"]');
+    function isIconTrigger(target) {
+      return target && target.matches && target.matches("[data-expense-icon-trigger]");
     }
-    document.addEventListener("focusin", function (event) {
-      if (isIconInput(event.target)) showExpenseIconPicker(event.target);
-      else if (!picker.contains(event.target)) closeExpenseIconPicker();
-    });
     document.addEventListener("click", function (event) {
-      if (isIconInput(event.target)) showExpenseIconPicker(event.target);
+      if (isIconTrigger(event.target)) showExpenseIconPicker(event.target);
       else if (!picker.contains(event.target)) closeExpenseIconPicker();
     });
     picker.addEventListener("pointerdown", function (event) {
@@ -2301,12 +2315,10 @@
     picker.addEventListener("click", function (event) {
       var button = event.target.closest("[data-expense-icon]");
       if (!button || !expenseIconTarget) return;
-      expenseIconTarget.value = button.dataset.expenseIcon;
-      expenseIconTarget.dispatchEvent(new Event("input", { bubbles: true }));
-      var input = expenseIconTarget;
+      setExpenseIconTrigger(expenseIconTarget, button.dataset.expenseIcon);
+      var trigger = expenseIconTarget;
       closeExpenseIconPicker();
-      input.focus({ preventScroll: true });
-      closeExpenseIconPicker();
+      trigger.focus({ preventScroll: true });
     });
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape") closeExpenseIconPicker();
@@ -2324,20 +2336,26 @@
     var iconInput = form.querySelector('input[name="icon"]');
     if (!iconInput) {
       iconInput = document.createElement("input");
-      iconInput.type = "text";
+      iconInput.type = "hidden";
       iconInput.name = "icon";
-      iconInput.className = "expense-cat-icon-input";
-      iconInput.maxLength = 8;
-      iconInput.placeholder = "🙂";
-      iconInput.setAttribute("aria-label", "Іконка категорії");
-      iconInput.setAttribute("aria-haspopup", "dialog");
-      iconInput.setAttribute("aria-controls", "expenseIconPicker");
-      iconInput.setAttribute("aria-expanded", "false");
-      iconInput.autocomplete = "off";
-      iconInput.spellcheck = false;
-      var colorInput = form.querySelector('input[name="color"]');
-      form.insertBefore(iconInput, colorInput || form.querySelector("button"));
+      iconInput.id = "newExpenseCategoryIcon";
+      form.appendChild(iconInput);
     }
+    var trigger = form.querySelector("[data-expense-icon-trigger]");
+    if (!trigger) {
+      trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "expense-cat-icon-button";
+      trigger.setAttribute("data-expense-icon-trigger", "");
+      trigger.setAttribute("aria-label", "Обрати емодзі категорії");
+      trigger.setAttribute("aria-haspopup", "dialog");
+      trigger.setAttribute("aria-controls", "expenseIconPicker");
+      trigger.setAttribute("aria-expanded", "false");
+      var colorInput = form.querySelector('input[name="color"]');
+      form.insertBefore(trigger, colorInput || form.querySelector("button"));
+    }
+    trigger.dataset.iconInputId = iconInput.id || "newExpenseCategoryIcon";
+    setExpenseIconTrigger(trigger, iconInput.value);
     var presets = form.querySelector(".expense-cat-form-presets");
     if (presets) presets.remove();
     return iconInput;
@@ -2373,7 +2391,7 @@
       drafts.push({
         name: nextName,
         color: normalizeExpenseCategoryColor(colorInput && colorInput.value, current.color),
-        icon: normalizeExpenseCategoryIcon(iconInput && iconInput.value)
+        icon: normalizeExpenseCategoryIcon(iconInput && iconInput.dataset.iconValue)
       });
     }
     return drafts;
@@ -2436,7 +2454,7 @@
       return '<div class="expense-cat-card">' +
         '<div class="expense-cat-row" data-cat-index="' + index + '">' +
         '<input type="text" class="expense-cat-name" data-cat-name value="' + esc(row.name) + '" maxlength="28" aria-label="Назва категорії" />' +
-        '<input type="text" data-cat-icon class="expense-cat-icon-input" value="' + esc(row.icon || "") + '" maxlength="8" placeholder="🙂" autocomplete="off" spellcheck="false" aria-label="Емодзі категорії" aria-haspopup="dialog" aria-expanded="false" aria-controls="expenseIconPicker" />' +
+        '<button type="button" data-cat-icon data-expense-icon-trigger data-icon-value="' + esc(row.icon || "") + '" class="expense-cat-icon-button' + (row.icon ? '' : ' is-empty') + '" aria-label="Обрати емодзі для категорії ' + esc(row.name) + '" aria-haspopup="dialog" aria-expanded="false" aria-controls="expenseIconPicker">' + esc(row.icon || "🙂") + '</button>' +
         '<input type="color" data-cat-color value="' + esc(row.color) + '" aria-label="Колір категорії" />' +
         '<button class="icon-btn" type="button" data-del-expense-cat="' + esc(row.name) + '" aria-label="Видалити категорію">✕</button>' +
         '</div></div>';

@@ -951,8 +951,9 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .expense-cat-card .expense-cat-row input { min-width: 0; }
 .expense-cat-card .expense-cat-row input[type="color"] { width: 40px; min-width: 40px; height: 44px; }
 .expense-cat-card .expense-cat-row .icon-btn { grid-column: auto; width: 36px; height: 44px; padding: 6px; }
-.expense-cat-icon-input, .expense-cat-form input[name="icon"] { width: 48px; height: 44px; padding: 6px 2px; text-align: center; font: 23px/1 system-ui, sans-serif; cursor: pointer; }
-.expense-cat-icon-input:focus { border-color: var(--gold); }
+.expense-cat-icon-button { width: 48px; height: 44px; padding: 6px 2px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel); color: var(--ink); text-align: center; font: 23px/1 system-ui, sans-serif; cursor: pointer; }
+.expense-cat-icon-button.is-empty { color: var(--ink-muted); opacity: .72; }
+.expense-cat-icon-button:focus-visible { border-color: var(--gold); outline: 2px solid color-mix(in srgb, var(--gold) 35%, transparent); outline-offset: 1px; }
 .expense-cat-actions { display: flex; margin-top: 4px; }
 .expense-cat-actions .btn-primary { width: 100%; min-height: 44px; }
 .expense-cat-form { display: grid; grid-template-columns: minmax(0, 1fr) 48px 40px; gap: 8px; }

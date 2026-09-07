@@ -261,6 +261,8 @@
         <div class="panel-head"><h2>Кастомізація витрат</h2><span class="panel-note">створюй секції та кольори</span></div>
         <form id="expenseCategoryForm" class="stack-form expense-cat-form">
           <input type="text" name="name" placeholder="Нова категорія" maxlength="28" required />
+          <button type="button" class="expense-cat-icon-button is-empty" data-expense-icon-trigger data-icon-input-id="newExpenseCategoryIcon" data-icon-value="" aria-label="Обрати емодзі категорії" aria-haspopup="dialog" aria-expanded="false" aria-controls="expenseIconPicker">🙂</button>
+          <input type="hidden" name="icon" id="newExpenseCategoryIcon" value="" />
           <input type="color" name="color" value="#5aa8ba" aria-label="Колір категорії" />
           <button class="btn-primary" type="submit">Додати</button>
         </form>

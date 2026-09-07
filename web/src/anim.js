@@ -360,9 +360,8 @@
 })();
 
 /* -------------------------------------------------------------------
-   Фольговий відблиск на великих цифрах їде за курсором, а на телефоні
-   за нахилом пристрою. Дозвіл на датчик питаємо лише по дотику і
-   мовчки відступаємо, якщо відмовили.
+   Фольговий відблиск на великих цифрах їде за курсором. Датчики руху
+   та орієнтації не використовуються, тому застосунок не просить доступ.
    ------------------------------------------------------------------- */
 
 (function () {
@@ -375,24 +374,4 @@
     setFoil((e.clientX / window.innerWidth) * 100);
   }, { passive: true });
 
-  function onTilt(e) {
-    if (root.classList.contains("calm")) return;
-    var g = e.gamma;
-    if (typeof g !== "number") return;
-    setFoil(((g + 45) / 90) * 100);
-  }
-  if (window.DeviceOrientationEvent) {
-    if (typeof DeviceOrientationEvent.requestPermission === "function") {
-      document.addEventListener("click", function once() {
-        document.removeEventListener("click", once);
-        try {
-          DeviceOrientationEvent.requestPermission().then(function (r) {
-            if (r === "granted") window.addEventListener("deviceorientation", onTilt);
-          }).catch(function () {});
-        } catch (e) {}
-      });
-    } else {
-      window.addEventListener("deviceorientation", onTilt);
-    }
-  }
 })();
