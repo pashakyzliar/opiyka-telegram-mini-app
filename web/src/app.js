@@ -3084,9 +3084,22 @@
     document.getElementById("prevYear").addEventListener("click", function () { state.viewYear--; renderYear(); });
     document.getElementById("nextYear").addEventListener("click", function () { state.viewYear++; renderYear(); });
 
+    var appScroller = document.getElementById("app");
+    var viewScrollPositions = Object.create(null);
+    function rememberViewScroll(view) {
+      if (appScroller) viewScrollPositions[view] = appScroller.scrollTop;
+    }
+    function restoreViewScroll(view) {
+      if (!appScroller) return;
+      requestAnimationFrame(function () {
+        appScroller.scrollTop = viewScrollPositions[view] || 0;
+      });
+    }
+
     var vtBusy = false;
     document.querySelectorAll(".viewtab").forEach(function (tab) {
       tab.addEventListener("click", function () {
+        rememberViewScroll(state.view);
         state.view = tab.dataset.view;
         document.querySelectorAll(".viewtab").forEach(function (t) {
           var on = t === tab;
@@ -3096,6 +3109,7 @@
           ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
           if (state.view === "cabinet") showCabinetProfile();
           renderAll();
+          restoreViewScroll(state.view);
         }
         // A second transition started while one is still running rejects with
         // "invalid state", and a synchronous throw would leave the screen on
@@ -3120,6 +3134,7 @@
         if (target === "security") { showCabinetSecurity(); return; }
         if (target === "glossary") { showCabinetGlossary(); return; }
         if (target === "quick") { showCabinetQuick(); return; }
+        rememberViewScroll(state.view);
         state.view = "settings";
         document.querySelectorAll(".viewtab").forEach(function (tab) {
           var on = tab.dataset.view === "settings";

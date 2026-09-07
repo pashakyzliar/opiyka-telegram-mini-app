@@ -100,6 +100,11 @@
 
 * { box-sizing: border-box; }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Кожен .display: flex/grid нижче переміг би [hidden], і діалоги, форми та
    приховані екрани показувались би самі. Власний ресет, не покладаючись на
    обгортку хоста. */
@@ -108,11 +113,13 @@
 body {
   margin: 0;
   position: relative;   /* прив'язка фонових шарів до всього документа */
+  height: var(--tg-viewport-stable-height, 100dvh);
+  min-height: 0;
   background: var(--paper);
   color: var(--ink);
   font-family: Oswald, "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 14px;
-  overflow-x: hidden;
+  overflow: hidden;
   -webkit-text-size-adjust: 100%;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
@@ -138,7 +145,20 @@ body {
   mask-image: linear-gradient(180deg, #000 0%, #000 55%, transparent 100%);
 }
 
-.app { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 16px 64px; min-height: var(--tg-viewport-height, auto); }
+.app {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 16px 64px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* ------------------------- типографіка ------------------------- */
 
@@ -1080,7 +1100,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .quick-add { padding: 10px; border: 1px solid var(--hair); border-radius: 15px; background: rgba(2, 12, 26, .2); }
 
 .wallet-dock {
-  position: fixed; z-index: 50; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
+  position: absolute; z-index: 50; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%);
   width: min(720px, calc(100vw - 16px)); padding: 8px;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 64px minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas: "month month mark plan year" "cabinet cabinet mark settings settings";
