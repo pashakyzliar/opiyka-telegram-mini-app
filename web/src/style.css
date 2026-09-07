@@ -1124,3 +1124,76 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .wallet-dock .viewtab { font-size: 12px; }
   .wallet-dock-mark { width: 54px; height: 54px; }
 }
+
+/* Контекстна довідка для інформаційних блоків. */
+[data-help-key] { position: relative; }
+.block-help-button {
+  position: absolute;
+  z-index: 4;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 1px solid rgba(174, 207, 255, .26);
+  border-radius: 50%;
+  background: rgba(5, 20, 38, .78);
+  color: var(--ink-soft);
+  box-shadow: 0 4px 12px rgba(0, 5, 18, .18);
+  font: 750 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.block-help-button:hover { border-color: rgba(174, 207, 255, .55); color: var(--ink); background: var(--panel-2); }
+.block-help-button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.block-help-button[aria-expanded="true"] { border-color: var(--gold); color: var(--gold-hi); background: rgba(58, 111, 202, .32); }
+.cell.has-block-help { padding-right: 46px; }
+.panel.has-block-help > .panel-head,
+.panel.has-block-help > .ledger-head { padding-right: 34px; }
+.cabinet-panel.has-block-help > .cabinet-profile { padding-right: 34px; }
+.dashboard-header > .block-help-button { top: auto; right: 14px; bottom: 13px; }
+#view-year .panel[data-help-key="year-table"] { padding-top: 44px; }
+
+.block-help-popover {
+  position: fixed;
+  z-index: 95;
+  width: min(328px, calc(100vw - 20px));
+  max-height: min(430px, 70dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+  border: 1px solid rgba(174, 207, 255, .28);
+  border-radius: 16px;
+  background: #102946;
+  color: var(--ink);
+  box-shadow: 0 18px 54px rgba(0, 5, 18, .62);
+}
+.block-help-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 9px; }
+.block-help-head strong { flex: 1; font: 700 15px/1.35 system-ui, sans-serif; }
+.block-help-close {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: 600 13px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.block-help-close:hover { background: rgba(174, 207, 255, .1); color: var(--ink); }
+.block-help-close:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.block-help-body { color: var(--ink-soft); font: 400 12px/1.55 system-ui, sans-serif; }
+.block-help-body p { margin: 0; }
+.block-help-body p + p { margin-top: 8px; }
+
+@media (max-width: 420px) {
+  .block-help-button { top: 10px; right: 10px; }
+  .dashboard-header > .block-help-button { top: auto; right: 11px; bottom: 10px; }
+  .block-help-popover { padding: 13px; border-radius: 15px; }
+}

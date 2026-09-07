@@ -18,6 +18,172 @@
  
   var EXPENSE_ICON_PRESETS = ["🛒", "🍔", "🥗", "☕", "🍱", "🍕", "🚗", "⛽", "🚌", "🚕", "🏠", "💡", "💧", "📱", "🌐", "💳", "💸", "🚬", "💊", "🏥", "🧴", "👕", "👟", "🎁", "🎉", "🎮", "📦", "🐾", "✈️", "🏨", "📚", "✂️", "🔧", "👶", "❤️", "🧾"];
 
+  var BLOCK_HELP = {
+    "dashboard-date": {
+      title: "Дата і привітання",
+      body: [
+        "День тижня і дата беруться з місцевого часу пристрою.",
+        "Привітання змінюється так: 05:00–11:59 — «Доброго ранку», 12:00–17:59 — «Доброго дня», 18:00–21:59 — «Доброго вечора», 22:00–04:59 — «Доброї ночі». Перевірка виконується щохвилини."
+      ]
+    },
+    ledger: {
+      title: "Журнал",
+      body: [
+        "Тут зберігаються підтверджені доходи й витрати вибраного місяця. Новий запис містить дату, категорію, суму та необов’язкову нотатку.",
+        "Пошук фільтрує журнал за текстом, категорією, сумою та датами. Витрата з позначкою «З резерву» рахується окремо від звичайного денного плану."
+      ]
+    },
+    allowance: {
+      title: "Сьогодні можна",
+      body: [
+        "Показує доступну суму на поточний момент тижня: сума денних планів від понеділка до сьогодні мінус звичайні витрати за цей самий період.",
+        "Невитрачений залишок переходить на наступний день. Витрати з позначкою «З резерву» сюди не віднімаються — вони зменшують окремий тижневий резерв. Від’ємний результат на картці показується як нуль."
+      ]
+    },
+    balance: {
+      title: "Общак",
+      body: [
+        "Загальний баланс = усі підтверджені доходи за весь час − усі підтверджені витрати − уже зафіксований «навар».",
+        "Перекази між гаманцями не змінюють загальний баланс. Лінія внизу показує зміну балансу за останні шість місяців з урахуванням перенесеного навару."
+      ]
+    },
+    "income-plan": {
+      title: "Заходить",
+      body: [
+        "Якщо заданий місячний план зарплати, картка показує, скільки ще очікується: планова сума мінус уже записані доходи вибраного місяця, але не менше нуля.",
+        "Якщо план зарплати не заданий, тут показується фактична сума доходів за місяць."
+      ]
+    },
+    "income-fact": {
+      title: "Зашло факт",
+      body: [
+        "Сума всіх підтверджених операцій типу «Дохід» у вибраному місяці.",
+        "Майбутній план зарплати тут не враховується — лише фактично додані надходження."
+      ]
+    },
+    expenses: {
+      title: "Спускаємо",
+      body: [
+        "Сума всіх підтверджених витрат у вибраному місяці. Поруч показується кількість таких списань.",
+        "Борги й незавершені записи сюди не входять. Витрати з резерву входять у місячну суму, але окремо враховуються в тижневому прогнозі."
+      ]
+    },
+    "week-forecast": {
+      title: "Тиждень",
+      body: [
+        "Кожний день починається із залишку попереднього дня плюс його денний план. Після віднімання звичайних витрат утворюється залишок, який переходить далі.",
+        "Резервні витрати показуються окремо й зменшують тижневий резерв. Галочка означає, що день завершився без перевищення доступної суми."
+      ]
+    },
+    budgets: {
+      title: "Ліміти",
+      body: [
+        "Для кожної категорії порівнюються фактичні витрати вибраного місяця з установленим місячним лімітом.",
+        "Смуга заповнюється пропорційно витратам, а після перевищення стає червоною. Значення в полі праворуч одразу змінює ліміт категорії."
+      ]
+    },
+    "expense-breakdown": {
+      title: "Розклад витрат",
+      body: [
+        "Діаграма групує всі підтверджені витрати вибраного місяця за категоріями.",
+        "Розмір сектора = сума категорії ÷ загальна сума витрат. У списку показані сума та округлена частка кожної категорії."
+      ]
+    },
+    "year-income": {
+      title: "Заносять за рік",
+      body: ["Сума всіх підтверджених доходів, дата яких належить вибраному року."]
+    },
+    "year-expense": {
+      title: "Спускаємо за рік",
+      body: ["Сума всіх підтверджених витрат, дата яких належить вибраному року."]
+    },
+    "year-navar": {
+      title: "Навар за рік",
+      body: ["Сума всіх позитивних місячних залишків, які були зафіксовані в історії навару за вибраний рік."]
+    },
+    "year-net": {
+      title: "Чистими за рік",
+      body: ["Різниця між підтвердженими доходами та витратами вибраного року: доходи − витрати."]
+    },
+    "six-month-trend": {
+      title: "Динаміка за 6 місяців",
+      body: [
+        "Для кожного з останніх шести календарних місяців окремо підсумовуються підтверджені доходи та витрати.",
+        "Висота стовпчиків відносна до найбільшої місячної суми на графіку."
+      ]
+    },
+    "year-table": {
+      title: "Річна таблиця",
+      body: [
+        "Таблиця підсумовує витрати вибраного року за категоріями та місяцями.",
+        "Категорії впорядковані від найбільшої річної суми до найменшої; смуга в колонці «Разом» показує їх співвідношення."
+      ]
+    },
+    recurring: {
+      title: "Регулярні платежі",
+      body: [
+        "Активний платіж автоматично створює витрату у вказане число кожного місяця. Для коротких місяців використовується останній доступний день.",
+        "Повторний запуск не створює дубль. Платіж можна призупинити, відновити або видалити."
+      ]
+    },
+    amortization: {
+      title: "Амортизація",
+      body: [
+        "Допомагає розкласти рідку велику покупку на умовну місячну вартість: сума ÷ кількість місяців.",
+        "Накопичений прогрес оцінюється за часом від дати старту, де один місяць дорівнює приблизно 30,4 дня. Цей блок не створює витрат у журналі автоматично."
+      ]
+    },
+    debts: {
+      title: "Борги",
+      body: [
+        "Окремо підсумовує відкриті суми «Мені винні» та «Я винен». Закриті борги лишаються в історії, але не входять у ці підсумки.",
+        "Борги не додаються до доходів або витрат і не впливають на баланс та статистику."
+      ]
+    },
+    "salary-plan": {
+      title: "Місячний план",
+      body: [
+        "Задає загальну очікувану зарплату за місяць і дні її надходження. Однакові дні прибираються, а дата автоматично обмежується останнім днем місяця.",
+        "План впливає на картку «Заходить». Після настання дати застосунок просить підтвердити фактичне надходження."
+      ]
+    },
+    "week-settings": {
+      title: "Налаштування тижня",
+      body: [
+        "Тижневий бюджет складається з денних планів і резерву. Унизу показується різниця: нерозподілений залишок або перевищення плану.",
+        "Перемикач «Сьогодні можна» вмикає прогноз. Звичайні витрати списуються з накопиченого денного плану, а позначені резервними — з резерву."
+      ]
+    },
+    categories: {
+      title: "Кастомізація витрат",
+      body: [
+        "Категорія визначає назву, емодзі та колір витрати в журналі, лімітах і діаграмах.",
+        "Перейменування переносить на нову назву пов’язані витрати, регулярні платежі та ліміт. Усі зміни списку застосовуються кнопкою «Оновити категорії»."
+      ]
+    },
+    "navar-history": {
+      title: "Навар",
+      body: [
+        "Після завершення місяця позитивна різниця «доходи − витрати» фіксується як навар. Від’ємний або нульовий результат не переноситься.",
+        "Історичний навар підсумовується окремо та віднімається від доступного загального балансу."
+      ]
+    },
+    service: {
+      title: "Сервіс",
+      body: [
+        "Спокійний режим вимикає декоративні анімації. PIN або доступна біометрія ховають екран на цьому пристрої, але не шифрують фінансові дані.",
+        "Експорт CSV формує таблицю операцій. Видалення акаунта безповоротно видаляє його дані після окремого підтвердження."
+      ]
+    },
+    cabinet: {
+      title: "Кабінет",
+      body: [
+        "Тут зібрані захист входу, категорії, особистий словник, ліміти та швидкий запис з iPhone.",
+        "Словник пов’язує ваші слова з категоріями для бота. Швидкий запис використовує окремий токен і додає витрату без відкриття Mini App."
+      ]
+    }
+  };
+
   var LS_KEY = "kopiyka_v2";
   var COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
 
@@ -1305,10 +1471,10 @@
     var navarYear = navarHistory().filter(function (row) { return yearOf(row.month) === String(state.viewYear); })
       .reduce(function (s, row) { return s + row.amount; }, 0);
     document.getElementById("yearTotals").innerHTML =
-      '<div class="cell"><span class="cell-label">Заносять</span><span class="cell-value positive money">' + esc(fmt(inc)) + '</span></div>' +
-      '<div class="cell"><span class="cell-label">Спускаємо</span><span class="cell-value negative money">' + esc(fmt(exp)) + '</span></div>' +
-      '<div class="cell"><span class="cell-label">Навар</span><span class="cell-value money">' + esc(fmt(navarYear)) + '</span></div>' +
-      '<div class="cell"><span class="cell-label">Чистими</span><span class="cell-value money">' + esc(fmt(inc - exp)) + '</span></div>';
+      '<div class="cell" data-help-key="year-income"><span class="cell-label">Заносять</span><span class="cell-value positive money">' + esc(fmt(inc)) + '</span></div>' +
+      '<div class="cell" data-help-key="year-expense"><span class="cell-label">Спускаємо</span><span class="cell-value negative money">' + esc(fmt(exp)) + '</span></div>' +
+      '<div class="cell" data-help-key="year-navar"><span class="cell-label">Навар</span><span class="cell-value money">' + esc(fmt(navarYear)) + '</span></div>' +
+      '<div class="cell" data-help-key="year-net"><span class="cell-label">Чистими</span><span class="cell-value money">' + esc(fmt(inc - exp)) + '</span></div>';
 
     var months = [];
     for (var m = 1; m <= 12; m++) months.push(state.viewYear + "-" + pad(m));
@@ -2330,6 +2496,100 @@
     if (window.visualViewport) window.visualViewport.addEventListener("resize", positionExpenseIconPicker);
   }
 
+  var blockHelpTarget = null;
+
+  function closeBlockHelpPopover(restoreFocus) {
+    var popover = document.getElementById("blockHelpPopover");
+    var target = blockHelpTarget;
+    if (popover) popover.hidden = true;
+    if (target) target.setAttribute("aria-expanded", "false");
+    blockHelpTarget = null;
+    if (restoreFocus && target && target.isConnected) target.focus({ preventScroll: true });
+  }
+
+  function positionBlockHelpPopover() {
+    var popover = document.getElementById("blockHelpPopover");
+    if (!popover || popover.hidden || !blockHelpTarget) return;
+    if (!blockHelpTarget.isConnected) { closeBlockHelpPopover(false); return; }
+    var rect = blockHelpTarget.getBoundingClientRect();
+    var viewport = window.visualViewport;
+    var topEdge = viewport ? viewport.offsetTop : 0;
+    var bottomEdge = topEdge + (viewport ? viewport.height : window.innerHeight);
+    var leftEdge = viewport ? viewport.offsetLeft : 0;
+    var rightEdge = leftEdge + (viewport ? viewport.width : window.innerWidth);
+    var top = rect.bottom + 8;
+    if (top + popover.offsetHeight > bottomEdge - 10) top = rect.top - popover.offsetHeight - 8;
+    var left = rect.right - popover.offsetWidth;
+    popover.style.top = Math.max(topEdge + 10, top) + "px";
+    popover.style.left = Math.max(leftEdge + 10, Math.min(left, rightEdge - popover.offsetWidth - 10)) + "px";
+  }
+
+  function openBlockHelpPopover(trigger) {
+    var popover = document.getElementById("blockHelpPopover");
+    var info = BLOCK_HELP[trigger.dataset.blockHelp];
+    if (!popover || !info) return;
+    if (blockHelpTarget === trigger && !popover.hidden) { closeBlockHelpPopover(true); return; }
+    if (blockHelpTarget) blockHelpTarget.setAttribute("aria-expanded", "false");
+    blockHelpTarget = trigger;
+    trigger.setAttribute("aria-expanded", "true");
+    document.getElementById("blockHelpTitle").textContent = info.title;
+    var body = document.getElementById("blockHelpBody");
+    body.replaceChildren();
+    info.body.forEach(function (paragraph) {
+      var p = document.createElement("p");
+      p.textContent = paragraph;
+      body.appendChild(p);
+    });
+    popover.hidden = false;
+    positionBlockHelpPopover();
+  }
+
+  function ensureBlockHelpButtons(root) {
+    if (blockHelpTarget && !blockHelpTarget.isConnected) closeBlockHelpPopover(false);
+    (root || document).querySelectorAll("[data-help-key]").forEach(function (block) {
+      var key = block.dataset.helpKey;
+      var info = BLOCK_HELP[key];
+      if (!info) return;
+      block.classList.add("has-block-help");
+      var exists = Array.prototype.some.call(block.children, function (child) {
+        return child.classList && child.classList.contains("block-help-button");
+      });
+      if (exists) return;
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "block-help-button";
+      button.dataset.blockHelp = key;
+      button.textContent = "?";
+      button.title = "Як це працює";
+      button.setAttribute("aria-label", "Як працює «" + info.title + "»");
+      button.setAttribute("aria-haspopup", "dialog");
+      button.setAttribute("aria-controls", "blockHelpPopover");
+      button.setAttribute("aria-expanded", "false");
+      block.appendChild(button);
+    });
+  }
+
+  function wireBlockHelp() {
+    var popover = document.getElementById("blockHelpPopover");
+    var close = document.getElementById("blockHelpClose");
+    if (!popover || !close) return;
+    ensureBlockHelpButtons(document);
+    document.addEventListener("click", function (event) {
+      var trigger = event.target.closest && event.target.closest("[data-block-help]");
+      if (trigger) { openBlockHelpPopover(trigger); return; }
+      if (!popover.hidden && !popover.contains(event.target)) closeBlockHelpPopover(false);
+    });
+    close.addEventListener("click", function () { closeBlockHelpPopover(true); });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && !popover.hidden) closeBlockHelpPopover(true);
+    });
+    window.addEventListener("resize", positionBlockHelpPopover);
+    window.addEventListener("scroll", function (event) {
+      if (!popover.contains(event.target)) closeBlockHelpPopover(false);
+    }, true);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", positionBlockHelpPopover);
+  }
+
   function ensureExpenseCategoryFormExtras() {
     var form = document.getElementById("expenseCategoryForm");
     if (!form) return null;
@@ -2601,6 +2861,7 @@
     }
     steps.forEach(function (fn) { fn(); });
     if (state.view === "main") refreshExpenseLabels();
+    ensureBlockHelpButtons(document);
   }
 
   var renderQueued = false;
@@ -2764,6 +3025,7 @@
 
   function wire() {
     wireExpenseIconPicker();
+    wireBlockHelp();
     setInterval(refreshCalendarDay, 60000);
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) refreshCalendarDay();
