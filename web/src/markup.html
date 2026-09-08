@@ -40,7 +40,7 @@
       <div class="ledger-head">
         <div class="ledger-title">
           <h2>Журнал</h2>
-          <span class="panel-note" id="ledgerSummary">останні рухи по общаку</span>
+          <span class="panel-note" id="ledgerSummary">останні операції за місяць</span>
         </div>
       </div>
 
@@ -102,7 +102,7 @@
           <tbody id="txBody"></tbody>
         </table>
       </div>
-      <div class="empty-note" id="txEmpty" hidden>Тут порожньо, паши давай.</div>
+      <div class="empty-note" id="txEmpty" hidden>Ще немає операцій. Додайте першу.</div>
     </section>
 
     <div class="bento" data-allowance="on">
@@ -117,26 +117,26 @@
       </div>
 
       <div class="cell cell-balance" data-help-key="balance">
-        <span class="cell-label">Общак <span class="cell-sub2">заг. баланс</span></span>
+        <span class="cell-label">Баланс <span class="cell-sub2">загальний</span></span>
         <span class="cell-value money" id="statBalance">0,00 ₴</span>
         <div class="cell-sub" id="statBalanceSub"></div>
         <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
       </div>
 
       <div class="cell cell-in" data-help-key="income-plan">
-        <span class="cell-label">Заходить <span class="cell-sub2">план на місяць</span></span>
+        <span class="cell-label">План доходу <span class="cell-sub2">на місяць</span></span>
         <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
         <div class="cell-sub" id="statIncomeSub"></div>
       </div>
 
       <div class="cell cell-in" data-help-key="income-fact">
-        <span class="cell-label">Зашло факт <span class="cell-sub2">усі приходи</span></span>
+        <span class="cell-label">Отримано <span class="cell-sub2">усі надходження</span></span>
         <span class="cell-value positive money" id="statIncomeFact">0,00 ₴</span>
         <div class="cell-sub" id="statIncomeFactSub"></div>
       </div>
 
       <div class="cell cell-out" data-help-key="expenses">
-        <span class="cell-label">Спускаємо <span class="cell-sub2">витрати/місяць</span></span>
+        <span class="cell-label">Витрати <span class="cell-sub2">за місяць</span></span>
         <span class="cell-value negative money" id="statExpense">0,00 ₴</span>
         <div class="cell-sub" id="statExpenseSub"></div>
       </div>
@@ -271,7 +271,7 @@
       </section>
 
       <section class="panel" id="settings-navar-history" data-help-key="navar-history">
-        <div class="panel-head"><h2>Навар</h2><span class="panel-note">Переноси по місяцях</span></div>
+        <div class="panel-head"><h2>Заощадження</h2><span class="panel-note">Переноси по місяцях</span></div>
         <div class="records" id="navarList"></div>
       </section>
 
@@ -309,7 +309,7 @@
   </section>
 
   <footer class="note">
-    Общак під замком — бачиш тільки ти.
+    Ваші дані бачите тільки ви.
     <span class="signature">WALLET</span>
   </footer>
 </div>

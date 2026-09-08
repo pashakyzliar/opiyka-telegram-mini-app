@@ -3,15 +3,15 @@
 
   /* ============================ constants ============================ */
 
-  var EXPENSE_CATS = ["Машина", "Пайка", "Хавка", "Дурка", "Продукти", "Сіги", "Подпіски"];
+  var EXPENSE_CATS = ["Транспорт", "Кафе і ресторани", "Доставка їжі", "Розваги", "Продукти", "Тютюн і алкоголь", "Підписки"];
   var DEFAULT_EXPENSE_CATEGORY_ROWS = [
-    { name: "Машина", color: "#5aa8ba" },
-    { name: "Пайка", color: "#c08a4a" },
-    { name: "Хавка", color: "#63b06e" },
-    { name: "Дурка", color: "#b07dad" },
+    { name: "Транспорт", color: "#5aa8ba" },
+    { name: "Кафе і ресторани", color: "#c08a4a" },
+    { name: "Доставка їжі", color: "#63b06e" },
+    { name: "Розваги", color: "#b07dad" },
     { name: "Продукти", color: "#d29a5c" },
-    { name: "Сіги", color: "#97a851" },
-    { name: "Подпіски", color: "#7d8ecb" }
+    { name: "Тютюн і алкоголь", color: "#97a851" },
+    { name: "Підписки", color: "#7d8ecb" }
   ];
   var INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
   var WALLETS = ["Кеш"];
@@ -41,28 +41,28 @@
       ]
     },
     balance: {
-      title: "Общак",
+      title: "Баланс",
       body: [
-        "Загальний баланс = усі підтверджені доходи за весь час − усі підтверджені витрати − уже зафіксований «навар».",
-        "Перекази між гаманцями не змінюють загальний баланс. Лінія внизу показує зміну балансу за останні шість місяців з урахуванням перенесеного навару."
+        "Загальний баланс = усі підтверджені доходи за весь час − усі підтверджені витрати − уже зафіксовані заощадження.",
+        "Перекази між гаманцями не змінюють загальний баланс. Лінія внизу показує зміну балансу за останні шість місяців з урахуванням перенесених заощаджень."
       ]
     },
     "income-plan": {
-      title: "Заходить",
+      title: "План доходу",
       body: [
         "Якщо заданий місячний план зарплати, картка показує, скільки ще очікується: планова сума мінус уже записані доходи вибраного місяця, але не менше нуля.",
         "Якщо план зарплати не заданий, тут показується фактична сума доходів за місяць."
       ]
     },
     "income-fact": {
-      title: "Зашло факт",
+      title: "Отримано",
       body: [
         "Сума всіх підтверджених операцій типу «Дохід» у вибраному місяці.",
         "Майбутній план зарплати тут не враховується — лише фактично додані надходження."
       ]
     },
     expenses: {
-      title: "Спускаємо",
+      title: "Витрати",
       body: [
         "Сума всіх підтверджених витрат у вибраному місяці. Поруч показується кількість таких списань.",
         "Борги й незавершені записи сюди не входять. Витрати з резерву входять у місячну суму, але окремо враховуються в тижневому прогнозі."
@@ -94,12 +94,12 @@
       body: ["Сума всіх підтверджених доходів, дата яких належить вибраному року."]
     },
     "year-expense": {
-      title: "Спускаємо за рік",
+      title: "Витрати за рік",
       body: ["Сума всіх підтверджених витрат, дата яких належить вибраному року."]
     },
     "year-navar": {
-      title: "Навар за рік",
-      body: ["Сума всіх позитивних місячних залишків, які були зафіксовані в історії навару за вибраний рік."]
+      title: "Заощадження за рік",
+      body: ["Сума всіх позитивних місячних залишків, які були зафіксовані в історії заощаджень за вибраний рік."]
     },
     "year-net": {
       title: "Чистими за рік",
@@ -144,7 +144,7 @@
       title: "Місячний план",
       body: [
         "Задає загальну очікувану зарплату за місяць і дні її надходження. Однакові дні прибираються, а дата автоматично обмежується останнім днем місяця.",
-        "План впливає на картку «Заходить». Після настання дати застосунок просить підтвердити фактичне надходження."
+        "План впливає на картку «План доходу». Після настання дати застосунок просить підтвердити фактичне надходження."
       ]
     },
     "week-settings": {
@@ -162,10 +162,10 @@
       ]
     },
     "navar-history": {
-      title: "Навар",
+      title: "Заощадження",
       body: [
-        "Після завершення місяця позитивна різниця «доходи − витрати» фіксується як навар. Від’ємний або нульовий результат не переноситься.",
-        "Історичний навар підсумовується окремо та віднімається від доступного загального балансу."
+        "Після завершення місяця позитивна різниця «доходи − витрати» фіксується як заощадження. Від’ємний або нульовий результат не переноситься.",
+        "Історичні заощадження підсумовуються окремо та віднімаються від доступного загального балансу."
       ]
     },
     service: {
@@ -704,8 +704,8 @@
     var txt = document.getElementById("syncText");
     if (!dot) return;
     dot.classList.remove("offline", "warn");
-    if (mode === "online") { txt.textContent = "BAHA VORA"; }
-    else if (mode === "local") { dot.classList.add("offline"); txt.textContent = "BAHA SPYT"; }
+    if (mode === "online") { txt.textContent = "Синхронізовано"; }
+    else if (mode === "local") { dot.classList.add("offline"); txt.textContent = "Офлайн"; }
     else { dot.classList.add("warn"); txt.textContent = "Перепідключення…"; }
   }
 
@@ -967,7 +967,7 @@
     var navarSum = totalNavar();
     document.getElementById("statBalanceSub").innerHTML =
       '<span class="split-chip"><i style="background:' + walletColor("Кеш") + '"></i>Кеш ' + esc(fmtShort(cash)) + '</span>' +
-      '<span class="split-chip"><i style="background:' + css("--gold") + '"></i>Навар ' + esc(fmtShort(navarSum)) + '</span>';
+      '<span class="split-chip"><i style="background:' + css("--gold") + '"></i>Заощадження ' + esc(fmtShort(navarSum)) + '</span>';
 
     var actual = monthActuals(state.viewMonth);
     var plannedIncome = plannedSalary(state.viewMonth);
@@ -1187,7 +1187,7 @@
     var open = state.goals.filter(function (g) { return !g.closedAt; });
     var closed = state.goals.filter(function (g) { return g.closedAt; });
     wrap.innerHTML = "";
-    if (!open.length) wrap.innerHTML = '<div class="empty-note">Ще нема заначки. Почни з "Подушка безпеки".</div>';
+    if (!open.length) wrap.innerHTML = '<div class="empty-note">Ще немає цілей. Почніть з «Подушки безпеки».</div>';
     open.forEach(function (g) {
       var pct = g.target > 0 ? Math.min(100, ((g.current || 0) / g.target) * 100) : 0;
       var card = document.createElement("div");
@@ -1203,14 +1203,14 @@
       wrap.appendChild(card);
     });
     wrap.querySelectorAll("[data-del-goal]").forEach(function (b) {
-      b.addEventListener("click", function () { store.remove("goals", b.dataset.delGoal).catch(function (e) { reportFailure("схрон", e); }); });
+      b.addEventListener("click", function () { store.remove("goals", b.dataset.delGoal).catch(function (e) { reportFailure("цілі", e); }); });
     });
     wrap.querySelectorAll("[data-contribute]").forEach(function (b) {
       b.addEventListener("click", function () {
         var id = b.dataset.contribute;
         var input = wrap.querySelector('[data-add="' + id + '"]');
         var p = parseAmount(input.value);
-        if (!p.ok) { showError("схрон", p.msg); input.focus(); return; }
+        if (!p.ok) { showError("цілі", p.msg); input.focus(); return; }
         var g = state.goals.find(function (x) { return x.id === id; });
         if (!g) return;
         var next = (g.current || 0) + p.value;
@@ -1219,7 +1219,7 @@
           patch.closedAt = todayISO();
           celebrate(g.name);
         }
-        store.update("goals", id, patch).catch(function (e) { reportFailure("схрон", e); });
+        store.update("goals", id, patch).catch(function (e) { reportFailure("цілі", e); });
         input.value = "";
       });
     });
@@ -1235,7 +1235,7 @@
   }
 
   function celebrate(name) {
-    showError("схрон", "Ціль «" + name + "» закрита.");
+    showError("цілі", "Ціль «" + name + "» закрита.");
     var app = document.getElementById("app");
     app.classList.add("foil-sweep");
     setTimeout(function () { app.classList.remove("foil-sweep"); }, 1600);
@@ -1294,7 +1294,7 @@
     var max = Math.max(1, Math.max.apply(null, rows.map(function (r) { return Math.max(r.inc, r.exp); })));
     document.getElementById("trendLegend").innerHTML =
       '<span class="split-chip"><i style="background:' + css("--positive") + '"></i>Заносять</span>' +
-      '<span class="split-chip"><i style="background:' + css("--negative") + '"></i>Спускаємо</span>';
+      '<span class="split-chip"><i style="background:' + css("--negative") + '"></i>Витрати</span>';
     var W = 320, H = 130, gap = W / rows.length;
     wrap.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + (H + 20) + '" class="trend" preserveAspectRatio="none">' +
       rows.map(function (r, i) {
@@ -1472,8 +1472,8 @@
       .reduce(function (s, row) { return s + row.amount; }, 0);
     document.getElementById("yearTotals").innerHTML =
       '<div class="cell" data-help-key="year-income"><span class="cell-label">Заносять</span><span class="cell-value positive money">' + esc(fmt(inc)) + '</span></div>' +
-      '<div class="cell" data-help-key="year-expense"><span class="cell-label">Спускаємо</span><span class="cell-value negative money">' + esc(fmt(exp)) + '</span></div>' +
-      '<div class="cell" data-help-key="year-navar"><span class="cell-label">Навар</span><span class="cell-value money">' + esc(fmt(navarYear)) + '</span></div>' +
+      '<div class="cell" data-help-key="year-expense"><span class="cell-label">Витрати</span><span class="cell-value negative money">' + esc(fmt(exp)) + '</span></div>' +
+      '<div class="cell" data-help-key="year-navar"><span class="cell-label">Заощадження</span><span class="cell-value money">' + esc(fmt(navarYear)) + '</span></div>' +
       '<div class="cell" data-help-key="year-net"><span class="cell-label">Чистими</span><span class="cell-value money">' + esc(fmt(inc - exp)) + '</span></div>';
 
     var months = [];
@@ -1556,7 +1556,7 @@
     if (state.view !== "plan") return;
     var wrap = document.getElementById("debtList");
     var open = state.debts.filter(function (d) { return !d.settled; });
-    if (!state.debts.length) { wrap.innerHTML = '<div class="empty-note">Боргів нема. Красава.</div>'; return; }
+    if (!state.debts.length) { wrap.innerHTML = '<div class="empty-note">Боргів немає.</div>'; return; }
     var lent = open.filter(function (d) { return d.direction === "lent"; }).reduce(function (s, d) { return s + d.amount; }, 0);
     var borrowed = open.filter(function (d) { return d.direction === "borrowed"; }).reduce(function (s, d) { return s + d.amount; }, 0);
     wrap.innerHTML = '<div class="debt-summary"><span>Мені винні ' + esc(fmtShort(lent)) + '</span><span>Я винен ' + esc(fmtShort(borrowed)) + '</span></div>' +
@@ -3342,7 +3342,7 @@
         document.querySelectorAll("[data-aimode]").forEach(function (x) { x.classList.toggle("active", x === b); });
         document.getElementById("aiRun").textContent = aiMode === "write" ? "Розібрати" : "Спитати";
         document.getElementById("aiInput").placeholder = aiMode === "write"
-          ? "сіги 65, кава 45, вчора заправився на 900"
+          ? "кава 45, обід 180, вчора заправився на 900"
           : "скільки я залив у машину за півроку";
         document.getElementById("aiAnswer").hidden = true;
         aiDraft = []; renderDraft(); aiStatus("");
@@ -3355,7 +3355,7 @@
       if (aiMode === "write") runAiWrite(text); else runAiAsk(text);
     });
     document.getElementById("aiStop").addEventListener("click", function () { if (aiCtl) aiCtl.abort(); });
-    document.getElementById("aiInput").placeholder = "сіги 65, кава 45, вчора заправився на 900";
+    document.getElementById("aiInput").placeholder = "кава 45, обід 180, вчора заправився на 900";
   }
 
   function debounce(fn, ms) {

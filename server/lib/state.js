@@ -6,13 +6,13 @@ const { newId, normalizeId } = require("./ids");
 
 const COLLECTIONS = ["transactions", "goals", "recurring", "debts", "amortize"];
 const DEFAULT_EXPENSE_CATEGORIES = [
-  { name: "Машина", color: "#5aa8ba", icon: "" },
-  { name: "Пайка", color: "#c08a4a", icon: "" },
-  { name: "Хавка", color: "#63b06e", icon: "" },
-  { name: "Дурка", color: "#b07dad", icon: "" },
+  { name: "Транспорт", color: "#5aa8ba", icon: "" },
+  { name: "Кафе і ресторани", color: "#c08a4a", icon: "" },
+  { name: "Доставка їжі", color: "#63b06e", icon: "" },
+  { name: "Розваги", color: "#b07dad", icon: "" },
   { name: "Продукти", color: "#d29a5c", icon: "" },
-  { name: "Сіги", color: "#97a851", icon: "" },
-  { name: "Подпіски", color: "#7d8ecb", icon: "" }
+  { name: "Тютюн і алкоголь", color: "#97a851", icon: "" },
+  { name: "Підписки", color: "#7d8ecb", icon: "" }
 ];
 const DEFAULT_INCOME_CATEGORIES = ["ЗП", "Аванс", "Підробіток", "Інше"];
 const DEFAULT_WALLETS = ["Кеш"];

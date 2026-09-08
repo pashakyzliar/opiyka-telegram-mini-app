@@ -244,7 +244,7 @@ async function categoryMarkupForTransaction(telegramId, txId, offset) {
 }
 
 async function handleBotStart(message) {
-  return sendBotMessage(message.chat.id, "Wallet by Baha_Vora", appMarkup());
+  return sendBotMessage(message.chat.id, "WALLET — облік ваших грошей.\nНапишіть витрату текстом, наприклад «250 атб», і я запишу її в потрібну категорію.", appMarkup());
 }
 
 async function handleBotHelp(message) {
