@@ -492,7 +492,8 @@
       lockEnabled: false,
       pin: "",
       streakRecord: 0,
-      bestRate: null
+      bestRate: null,
+      onboardingDone: false
     };
   }
   function settings() {
@@ -576,6 +577,18 @@
         if (i >= 0) data[c][i] = o; else data[c].push(o);
         persist(); fire(c);
         return Promise.resolve(o.id);
+      },
+      // Імпорт виписки додає сотні рядків за раз: один запис і одне
+      // перемальовування замість сотні.
+      bulkAdd: function (c, rows) {
+        (rows || []).forEach(function (obj) {
+          var o = Object.assign({}, obj);
+          o.id = uid();
+          if (!o.createdAt) o.createdAt = new Date().toISOString();
+          data[c].push(o);
+        });
+        persist(); fire(c);
+        return Promise.resolve({ added: (rows || []).length, failed: 0 });
       },
       update: function (c, id, patch) {
         var o = data[c].find(function (x) { return x.id === id; });
@@ -670,6 +683,20 @@
         delete o.id;
         if (forcedId) return db.collection(c).doc(forcedId).set(o).then(function () { return forcedId; });
         return db.collection(c).add(o).then(function (ref) { return ref.id; });
+      },
+      // Через адаптер пачка йде одним проходом і оновлює стан один раз.
+      // Без bulkAdd кожен рядок коштував би запис плюс повне вичитування.
+      bulkAdd: function (c, rows) {
+        var list = (rows || []).map(function (row) {
+          var o = Object.assign({}, row);
+          delete o.id;
+          if (!o.createdAt) o.createdAt = new Date().toISOString();
+          return o;
+        });
+        if (typeof db.bulkAdd === "function") return db.bulkAdd(c, list);
+        return list.reduce(function (chain, row) {
+          return chain.then(function () { return db.collection(c).add(row); });
+        }, Promise.resolve()).then(function () { return { added: list.length, failed: 0 }; });
       },
       update: function (c, id, patch) { return db.collection(c).doc(id).update(patch); },
         remove: function (c, id) { return db.collection(c).doc(id).delete(); },
@@ -2047,6 +2074,614 @@
     });
   }
 
+  /* ============================ онбординг ============================ */
+
+  /* Порожній дашборд нічого не пояснює новому користувачу: п'ять карток по
+     нулю і форма нижче за межею екрана. Замість цього — три питання, після
+     яких на дашборді вже є дані, а «Сьогодні можна» починає рахуватись.
+     Показується рівно один раз: прапорець onboardingDone їде в налаштування
+     (сервер тримає невідомі ключі в extra_settings, тож він переживає
+     синхронізацію), а журнал з операціями сам по собі закриває онбординг. */
+
+  var onbStep = 1;
+  var onbCategory = "";
+  var onbBusy = false;
+
+  function onbEl(id) { return document.getElementById(id); }
+
+  function onbShowStep(step) {
+    onbStep = step;
+    document.querySelectorAll("[data-onb-step]").forEach(function (section) {
+      section.hidden = Number(section.dataset.onbStep) !== step;
+    });
+    document.querySelectorAll("[data-onb-dot]").forEach(function (dot) {
+      dot.classList.toggle("is-on", Number(dot.dataset.onbDot) <= step);
+    });
+    var next = onbEl("onbNext");
+    if (next) next.textContent = step === 3 ? "Готово" : "Далі";
+    var input = document.querySelector('[data-onb-step="' + step + '"] input');
+    if (input) setTimeout(function () { try { input.focus({ preventScroll: true }); } catch (e) {} }, 60);
+  }
+
+  function onbRenderCats() {
+    var wrap = onbEl("onbCats");
+    if (!wrap) return;
+    var rows = expenseCats();
+    onbCategory = rows.length ? rows[0].name : "";
+    wrap.innerHTML = rows.map(function (row, index) {
+      return '<button class="onboarding-cat" type="button" data-onb-cat="' + esc(row.name) + '" aria-pressed="' +
+        (index === 0 ? "true" : "false") + '">' +
+        '<i style="background:' + esc(row.color) + '"></i>' + esc(expenseLabel(row.name)) + '</button>';
+    }).join("");
+    wrap.querySelectorAll("[data-onb-cat]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        onbCategory = button.dataset.onbCat;
+        wrap.querySelectorAll("[data-onb-cat]").forEach(function (other) {
+          other.setAttribute("aria-pressed", other === button ? "true" : "false");
+        });
+      });
+    });
+  }
+
+  function onbWeekHint() {
+    var hint = onbEl("onbWeekHint");
+    if (!hint) return;
+    var value = softAmount(onbEl("onbWeek").value);
+    hint.textContent = value ? "Це " + fmtShort(round2(value / 7)) + " на день" : "";
+  }
+
+  // Тижневу суму розкладаємо порівну, а копійки округлення віддаємо неділі,
+  // щоб сума денних планів точно дорівнювала введеній.
+  function onbSpreadWeek(total) {
+    var perDay = round2(total / 7);
+    var days = [perDay, perDay, perDay, perDay, perDay, perDay, 0];
+    days[6] = round2(total - perDay * 6);
+    if (days[6] < 0) days[6] = 0;
+    return days;
+  }
+
+  function onbFinish(patch) {
+    var next = Object.assign({ onboardingDone: true }, patch || {});
+    saveSettings(next);
+    var box = onbEl("onboarding");
+    if (box) box.hidden = true;
+    renderAll();
+    focusAmount();
+  }
+
+  function onbSubmit() {
+    if (onbBusy) return;
+    if (onbStep === 1) {
+      var incomeRaw = String(onbEl("onbIncome").value || "").trim();
+      if (incomeRaw) {
+        var income = parseAmount(incomeRaw);
+        if (!income.ok) { showError("дохід", income.msg); return; }
+        saveSettings({ salaryAmount: income.value });
+      }
+      onbShowStep(2);
+      return;
+    }
+    if (onbStep === 2) {
+      var weekRaw = String(onbEl("onbWeek").value || "").trim();
+      if (weekRaw) {
+        var week = parseAmount(weekRaw);
+        if (!week.ok) { showError("тиждень", week.msg); return; }
+        saveSettings({
+          weekBudget: week.value,
+          weekDaily: onbSpreadWeek(week.value),
+          allowanceEnabled: true
+        });
+      }
+      onbShowStep(3);
+      return;
+    }
+    var amountRaw = String(onbEl("onbAmount").value || "").trim();
+    if (!amountRaw) { onbFinish(); return; }
+    var amount = parseAmount(amountRaw);
+    if (!amount.ok) { showError("витрата", amount.msg); return; }
+    onbBusy = true;
+    Promise.resolve(commitTx({
+      type: "expense",
+      category: onbCategory || defaultExpenseName(),
+      amount: amount.value,
+      wallet: "Кеш",
+      date: todayISO(),
+      note: ""
+    })).then(function () {
+      onbBusy = false;
+      onbFinish();
+    }).catch(function () {
+      onbBusy = false;
+      onbFinish();
+    });
+  }
+
+  function wireOnboarding() {
+    var form = onbEl("onboardingForm");
+    if (!form) return;
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      onbSubmit();
+    });
+    var skip = onbEl("onbSkip");
+    if (skip) skip.addEventListener("click", function () { onbFinish(); });
+    var week = onbEl("onbWeek");
+    if (week) week.addEventListener("input", onbWeekHint);
+  }
+
+  function maybeStartOnboarding() {
+    var box = onbEl("onboarding");
+    if (!box) return;
+    var s = settings();
+    // Журнал з операціями означає, що людина вже розібралась сама.
+    if (state.transactions.length) {
+      if (!s.onboardingDone) saveSettings({ onboardingDone: true });
+      box.hidden = true;
+      return;
+    }
+    if (s.onboardingDone) { box.hidden = true; return; }
+    // Замок має пріоритет: спершу людина заходить, потім її щось питають.
+    if (!document.getElementById("pinGate").hidden) return;
+    if (!box.hidden) return;
+    onbRenderCats();
+    onbShowStep(1);
+    box.hidden = false;
+  }
+
+  /* ==================== імпорт банківської виписки ==================== */
+
+  /* Файл розбирається тут, у браузері: виписка нікуди не відправляється, у
+     базу потрапляють лише готові операції після підтвердження людиною.
+     Імпортуємо тільки витрати — надходження в картковій виписці здебільшого
+     не доходи, а власні поповнення, кешбек і повернення. */
+
+  var IMPORT_MAX_ROWS = 800;
+  var XLSX_CDN = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+  var XLSX_SRI = "sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw";
+
+  // Назва мережі в описі точніша за MCC: банки ставлять код торговця як
+  // доведеться. Тому спершу ключові слова, і лише потім MCC.
+  // Порядок правил важливий: «bolt food» має спрацювати раніше за «bolt».
+  var IMPORT_MERCHANT_RULES = [
+    ["Доставка їжі", ["glovo", "глово", "bolt food", "болт фуд", "rocket", "ракета", "raketa", "wolt", "uber eats", "menu.ua"]],
+    ["Продукти", ["атб", "atb", "сільпо", "silpo", "новус", "novus", "varus", "варус", "фора", "fora", "ашан", "auchan", "метро", "metro", "космос", "еко маркет", "эко маркет", "маркетопт", "делві", "близенько"]],
+    ["Кафе і ресторани", ["mcdonald", "макдональд", "kfc", "пузата", "львівськ", "аромакава", "coffee", "кав'ярн", "кавярн", "кофе", "pizza", "піц", "суші", "sushi", "ресторан", "кафе", "starbucks", "чашка", "буфет", "їдальн"]],
+    ["Транспорт", ["wog", "окко", "okko", "socar", "укрнафта", "shell", "брсм", "amic", "авіас", "авиас", "uklon", "уклон", "uber", "bolt", "таксі", "такси", "азс", "паливо", "паркінг", "parking", "автозапчаст", "шиномонтаж", "укрзалізниц", "blablacar"]],
+    ["Підписки", ["netflix", "spotify", "youtube", "megogo", "київстар", "kyivstar", "vodafone", "lifecell", "chatgpt", "openai", "icloud", "apple.com/bill", "google", "sweet.tv", "setanta", "patreon", "megogo", "інтертелеком"]],
+    ["Тютюн і алкоголь", ["тютюн", "сигарет", "цигарк", "iqos", "glo ", "vape", "вейп", "алкогол", "wine", "вино", "пиво", "beer", "горілк", "whisky", "віскі", "wine time", "мушля"]],
+    ["Розваги", ["кіно", "cinema", "multiplex", "planeta kino", "квиток", "ticket", "концерт", "concert", "steam", "playstation", "аквапарк", "боулінг", "квест"]]
+  ];
+
+  var IMPORT_MCC = {
+    "5411": "Продукти", "5422": "Продукти", "5441": "Продукти", "5451": "Продукти",
+    "5462": "Продукти", "5499": "Продукти",
+    "5812": "Кафе і ресторани", "5813": "Кафе і ресторани", "5814": "Кафе і ресторани",
+    "5541": "Транспорт", "5542": "Транспорт", "4111": "Транспорт", "4121": "Транспорт",
+    "4131": "Транспорт", "4784": "Транспорт", "7523": "Транспорт", "5533": "Транспорт",
+    "5921": "Тютюн і алкоголь", "5993": "Тютюн і алкоголь",
+    "7832": "Розваги", "7841": "Розваги", "7922": "Розваги", "7929": "Розваги",
+    "7994": "Розваги", "7996": "Розваги", "7997": "Розваги", "7998": "Розваги", "7999": "Розваги",
+    "4814": "Підписки", "4816": "Підписки", "4899": "Підписки",
+    "5815": "Підписки", "5816": "Підписки", "5817": "Підписки", "5818": "Підписки"
+  };
+
+  // Це списання, але не витрати: власні перекази, поповнення інших рахунків,
+  // повернення. Рядок показуємо, та знімаємо позначку — хай людина вирішує.
+  var IMPORT_TRANSFER_HINTS = [
+    "переказ", "перевод", "на картку", "з картки на картку", "власн", "поповнення",
+    "кешбек", "кэшбэк", "cashback", "повернення", "відсотк", "капіталіз", "депозит", "p2p"
+  ];
+
+  var importState = { rows: [], fileName: "" };
+
+  function importDecode(buffer) {
+    var bytes = new Uint8Array(buffer);
+    if (bytes.length > 2 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+      return new TextDecoder("utf-8").decode(bytes.subarray(3));
+    }
+    // Приват віддає CSV у windows-1251. Строгий декодер падає на такому файлі,
+    // і це найнадійніший спосіб відрізнити одне кодування від іншого.
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+    catch (e) {
+      try { return new TextDecoder("windows-1251").decode(bytes); }
+      catch (e2) { return new TextDecoder("utf-8").decode(bytes); }
+    }
+  }
+
+  function importDetectDelimiter(text) {
+    var head = text.split("\n").slice(0, 5).join("\n");
+    var counts = { ";": 0, ",": 0, "\t": 0 };
+    var quoted = false;
+    for (var i = 0; i < head.length; i++) {
+      var ch = head[i];
+      if (ch === '"') { quoted = !quoted; continue; }
+      if (quoted) continue;
+      if (counts[ch] !== undefined) counts[ch]++;
+    }
+    var best = ";";
+    Object.keys(counts).forEach(function (key) { if (counts[key] > counts[best]) best = key; });
+    return counts[best] ? best : ";";
+  }
+
+  function importSplitCsv(text) {
+    var delimiter = importDetectDelimiter(text);
+    var rows = [];
+    var row = [];
+    var field = "";
+    var quoted = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (quoted) {
+        if (ch !== '"') { field += ch; continue; }
+        if (text[i + 1] === '"') { field += '"'; i++; continue; }
+        quoted = false;
+        continue;
+      }
+      if (ch === '"') { quoted = true; continue; }
+      if (ch === delimiter) { row.push(field); field = ""; continue; }
+      if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; continue; }
+      if (ch === "\r") continue;
+      field += ch;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows.map(function (cells) {
+      return cells.map(function (cell) { return String(cell).replace(/ /g, " ").trim(); });
+    });
+  }
+
+  function importFindHeader(table) {
+    for (var i = 0; i < Math.min(table.length, 25); i++) {
+      var cells = table[i] || [];
+      if (cells.length < 3) continue;
+      var hasDate = cells.some(function (cell) { return /дата|date/i.test(cell); });
+      var hasAmount = cells.some(function (cell) { return /сум|amount/i.test(cell); });
+      if (hasDate && hasAmount) return i;
+    }
+    return -1;
+  }
+
+  function importFindColumn(header, pattern) {
+    for (var i = 0; i < header.length; i++) if (pattern.test(header[i])) return i;
+    return -1;
+  }
+
+  // У виписці кілька колонок із «сумою»: у валюті картки, у валюті операції,
+  // комісія, кешбек, залишок. Потрібна саме гривнева сума операції.
+  function importPickAmountColumn(header) {
+    var best = -1;
+    var bestScore = -99;
+    header.forEach(function (name, index) {
+      if (!/сум|amount/i.test(name)) return;
+      var score = 0;
+      if (/картк|карти|card|uah|грн/i.test(name)) score += 3;
+      if (/валюті операці|валюте операц|транзакц|transaction/i.test(name)) score -= 2;
+      if (/комісі|комисс|кешб|кэшб|cashback|залишок|остаток|balance/i.test(name)) score -= 5;
+      if (score > bestScore) { bestScore = score; best = index; }
+    });
+    return best;
+  }
+
+  function importParseDate(value) {
+    if (value instanceof Date && !isNaN(value.getTime())) {
+      return value.getFullYear() + "-" + pad(value.getMonth() + 1) + "-" + pad(value.getDate());
+    }
+    var text = String(value == null ? "" : value).trim();
+    var iso = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return iso[1] + "-" + iso[2] + "-" + iso[3];
+    var dotted = text.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+    if (!dotted) return "";
+    var year = Number(dotted[3]);
+    if (year < 100) year += 2000;
+    var month = Number(dotted[2]);
+    var day = Number(dotted[1]);
+    if (!(month >= 1 && month <= 12) || !(day >= 1 && day <= 31)) return "";
+    return year + "-" + pad(month) + "-" + pad(day);
+  }
+
+  // «-1 234,56», «−1234.56», «(1234,56)» і «1 234,56» мають дати одне число.
+  function importParseNumber(value) {
+    if (typeof value === "number") return isFinite(value) ? value : null;
+    var raw = String(value == null ? "" : value).replace(/ /g, " ").trim();
+    if (!raw) return null;
+    var negative = /^[-−–]/.test(raw) || /^\(.*\)$/.test(raw);
+    var digits = raw.replace(/[^\d.,]/g, "");
+    if (!digits) return null;
+    var sep = Math.max(digits.lastIndexOf(","), digits.lastIndexOf("."));
+    var intPart = digits;
+    var fracPart = "";
+    if (sep >= 0 && digits.length - sep - 1 <= 2) {
+      intPart = digits.slice(0, sep);
+      fracPart = digits.slice(sep + 1);
+    }
+    intPart = intPart.replace(/[.,]/g, "");
+    var number = Number((intPart || "0") + (fracPart ? "." + fracPart : ""));
+    if (!isFinite(number)) return null;
+    return negative ? -number : number;
+  }
+
+  function importDetectCategory(description, mcc) {
+    var text = String(description || "").toLocaleLowerCase("uk-UA");
+    var names = expenseCatNames();
+    for (var i = 0; i < IMPORT_MERCHANT_RULES.length; i++) {
+      var rule = IMPORT_MERCHANT_RULES[i];
+      for (var j = 0; j < rule[1].length; j++) {
+        if (text.indexOf(rule[1][j]) >= 0) return names.indexOf(rule[0]) >= 0 ? rule[0] : "";
+      }
+    }
+    var code = String(mcc == null ? "" : mcc).replace(/\D/g, "");
+    var byMcc = code && IMPORT_MCC[code];
+    return byMcc && names.indexOf(byMcc) >= 0 ? byMcc : "";
+  }
+
+  function importLooksLikeTransfer(description) {
+    var text = String(description || "").toLocaleLowerCase("uk-UA");
+    return IMPORT_TRANSFER_HINTS.some(function (hint) { return text.indexOf(hint) >= 0; });
+  }
+
+  function importKeyFor(date, amount, description) {
+    return "imp:" + date + ":" + Math.round(Math.abs(Number(amount) || 0) * 100) + ":" +
+      String(description || "").toLocaleLowerCase("uk-UA").replace(/\s+/g, " ").trim().slice(0, 40);
+  }
+
+  function importExistingKeys() {
+    var seen = Object.create(null);
+    state.transactions.forEach(function (row) {
+      if (row.importKey) seen[row.importKey] = true;
+      seen[importKeyFor(row.date, row.amount, row.note)] = true;
+    });
+    return seen;
+  }
+
+  function importBuildRows(table) {
+    var headerIndex = importFindHeader(table);
+    if (headerIndex < 0) throw new Error("no_header");
+    var header = table[headerIndex];
+    var dateColumn = importFindColumn(header, /дата|date/i);
+    var descColumn = importFindColumn(header, /опис|деталі|детали|призначенн|контрагент|коментар|merchant|description/i);
+    var mccColumn = importFindColumn(header, /mcc/i);
+    var amountColumn = importPickAmountColumn(header);
+    if (dateColumn < 0 || amountColumn < 0) throw new Error("no_columns");
+
+    var known = importExistingKeys();
+    var rows = [];
+    var incomes = 0;
+    var broken = 0;
+    for (var i = headerIndex + 1; i < table.length && rows.length < IMPORT_MAX_ROWS; i++) {
+      var cells = table[i] || [];
+      if (!cells.length || cells.every(function (cell) { return !cell; })) continue;
+      var date = importParseDate(cells[dateColumn]);
+      var amount = importParseNumber(cells[amountColumn]);
+      if (!date || amount === null || amount === 0) { broken++; continue; }
+      if (amount > 0) { incomes++; continue; }
+      var description = descColumn >= 0 ? String(cells[descColumn] || "").replace(/\s+/g, " ").trim() : "";
+      var key = importKeyFor(date, amount, description);
+      var transfer = importLooksLikeTransfer(description);
+      var duplicate = !!known[key];
+      known[key] = true;
+      rows.push({
+        date: date,
+        amount: round2(Math.abs(amount)),
+        note: description.slice(0, 120),
+        category: importDetectCategory(description, mccColumn >= 0 ? cells[mccColumn] : ""),
+        importKey: key,
+        duplicate: duplicate,
+        transfer: transfer,
+        include: !duplicate && !transfer
+      });
+    }
+    return { rows: rows, incomes: incomes, broken: broken };
+  }
+
+  var xlsxPromise = null;
+  function importLoadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    if (xlsxPromise) return xlsxPromise;
+    xlsxPromise = new Promise(function (resolve, reject) {
+      var el = document.createElement("script");
+      el.src = XLSX_CDN;
+      el.integrity = XLSX_SRI;
+      el.crossOrigin = "anonymous";
+      el.referrerPolicy = "no-referrer";
+      el.onload = function () { window.XLSX ? resolve(window.XLSX) : reject(new Error("xlsx")); };
+      el.onerror = function () { reject(new Error("xlsx")); };
+      document.head.appendChild(el);
+    }).catch(function (error) { xlsxPromise = null; throw error; });
+    return xlsxPromise;
+  }
+
+  function importTableFromFile(file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onerror = function () { reject(new Error("read")); };
+      reader.onload = function () { resolve(reader.result); };
+      reader.readAsArrayBuffer(file);
+    }).then(function (buffer) {
+      if (/\.xlsx?$/i.test(file.name)) {
+        return importLoadXlsx().then(function (XLSX) {
+          var book = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
+          var sheet = book.Sheets[book.SheetNames[0]];
+          return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, blankrows: false });
+        });
+      }
+      return importSplitCsv(importDecode(buffer));
+    });
+  }
+
+  function importErrorText(error) {
+    var code = error && error.message;
+    if (code === "no_header") return "Не знайшов рядок із заголовками. Вивантажте виписку без змін, як її віддає банк.";
+    if (code === "no_columns") return "У файлі немає колонок дати й суми. Схоже, це не виписка.";
+    if (code === "xlsx") return "Не вдалось завантажити читач XLSX. Перевірте інтернет або вивантажте виписку у форматі CSV.";
+    if (code === "read") return "Не вдалось прочитати файл.";
+    return "Не вдалось розібрати файл. Спробуйте формат CSV.";
+  }
+
+  function importRenderRows() {
+    var wrap = document.getElementById("importRows");
+    if (!wrap) return;
+    var names = expenseCatNames();
+    wrap.innerHTML = importState.rows.map(function (row, index) {
+      var flag = row.duplicate ? '<span class="import-flag">вже є</span>'
+        : row.transfer ? '<span class="import-flag">переказ</span>' : "";
+      var options = ['<option value="">— оберіть категорію —</option>'].concat(names.map(function (name) {
+        return '<option value="' + esc(name) + '"' + (name === row.category ? " selected" : "") + '>' + esc(expenseLabel(name)) + '</option>';
+      })).join("");
+      return '<div class="import-row" data-import-index="' + index + '" data-on="' + (row.include ? "1" : "0") +
+        '" data-need="' + (row.category ? "0" : "1") + '">' +
+        '<input type="checkbox" data-import-toggle aria-label="Імпортувати операцію"' + (row.include ? " checked" : "") + ' />' +
+        '<span class="import-row-main"><span class="import-row-desc">' + esc(row.note || "Без опису") + flag + '</span>' +
+        '<span class="import-row-meta">' + esc(row.date.split("-").reverse().join(".")) + '</span></span>' +
+        '<span class="import-row-amount">−' + esc(fmt(row.amount)) + '</span>' +
+        '<select data-import-category aria-label="Категорія операції">' + options + '</select>' +
+        '</div>';
+    }).join("");
+    importUpdateSummary();
+  }
+
+  function importUpdateSummary() {
+    var summary = document.getElementById("importSummary");
+    var confirm = document.getElementById("importConfirm");
+    if (!summary) return;
+    var chosen = importState.rows.filter(function (row) { return row.include; });
+    var missing = chosen.filter(function (row) { return !row.category; }).length;
+    var total = chosen.reduce(function (sum, row) { return sum + row.amount; }, 0);
+    // Формулювання через двокрапку свідоме: воно не потребує узгодження
+    // числівника з іменником, тож не даватиме «1 операцій».
+    var parts = ["знайдено витрат: " + importState.rows.length, "позначено: " + chosen.length + " на " + fmtShort(total)];
+    if (missing) parts.push("без категорії: " + missing);
+    summary.textContent = parts.join(" · ");
+    if (confirm) {
+      confirm.disabled = !chosen.length || !!missing;
+      confirm.textContent = missing ? "Оберіть категорії" : "Імпортувати " + chosen.length;
+    }
+  }
+
+  function importOpenSheet() {
+    var sheet = document.getElementById("importSheet");
+    if (!sheet) return;
+    importRenderRows();
+    document.getElementById("importProgress").textContent = "";
+    sheet.hidden = false;
+  }
+
+  function importCloseSheet() {
+    var sheet = document.getElementById("importSheet");
+    if (sheet) sheet.hidden = true;
+    importState.rows = [];
+  }
+
+  function importRunImport() {
+    var chosen = importState.rows.filter(function (row) { return row.include && row.category; });
+    if (!chosen.length) return;
+    var progress = document.getElementById("importProgress");
+    var confirm = document.getElementById("importConfirm");
+    if (confirm) { confirm.disabled = true; confirm.textContent = "Записую…"; }
+    if (progress) progress.textContent = "Записую операції: " + chosen.length + "…";
+    var payload = chosen.map(function (row) {
+      return {
+        type: "expense",
+        category: row.category,
+        amount: row.amount,
+        wallet: "Кеш",
+        date: row.date,
+        note: row.note,
+        importKey: row.importKey
+      };
+    });
+    var job = store && typeof store.bulkAdd === "function"
+      ? store.bulkAdd("transactions", payload)
+      : payload.reduce(function (chain, row) {
+          return chain.then(function () { return commitTx(row, undefined, true); });
+        }, Promise.resolve());
+    return Promise.resolve(job).then(function () {
+      importCloseSheet();
+      showError("імпорт", "Готово. Додано операцій: " + chosen.length + ".");
+      renderAll();
+    }).catch(function (error) {
+      reportFailure("імпорт", error);
+      if (confirm) { confirm.disabled = false; confirm.textContent = "Спробувати ще раз"; }
+      if (progress) progress.textContent = "";
+    });
+  }
+
+  function importHandleFile(file, noteEl) {
+    if (!file) return;
+    importState.fileName = file.name;
+    if (noteEl) noteEl.textContent = "Читаю " + file.name + "…";
+    importTableFromFile(file).then(function (table) {
+      var built = importBuildRows(table);
+      if (!built.rows.length) {
+        if (noteEl) noteEl.textContent = "У файлі немає витрат за цей період.";
+        return;
+      }
+      importState.rows = built.rows;
+      var tail = [];
+      if (built.incomes) tail.push("надходжень пропущено: " + built.incomes);
+      if (built.broken) tail.push("нерозпізнаних рядків: " + built.broken);
+      if (noteEl) noteEl.textContent = tail.join(" · ");
+      importOpenSheet();
+    }).catch(function (error) {
+      console.error("[Копійка] імпорт:", error);
+      if (noteEl) noteEl.textContent = importErrorText(error);
+    });
+  }
+
+  function wireImportSheet() {
+    var sheet = document.getElementById("importSheet");
+    if (!sheet) return;
+    document.getElementById("importClose").addEventListener("click", importCloseSheet);
+    document.getElementById("importConfirm").addEventListener("click", importRunImport);
+    sheet.querySelectorAll("[data-import-all]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        var on = button.dataset.importAll === "1";
+        importState.rows.forEach(function (row) { row.include = on; });
+        importRenderRows();
+      });
+    });
+    var rows = document.getElementById("importRows");
+    rows.addEventListener("change", function (event) {
+      var host = event.target.closest("[data-import-index]");
+      if (!host) return;
+      var row = importState.rows[Number(host.dataset.importIndex)];
+      if (!row) return;
+      if (event.target.hasAttribute("data-import-toggle")) {
+        row.include = event.target.checked;
+        host.dataset.on = row.include ? "1" : "0";
+      } else if (event.target.hasAttribute("data-import-category")) {
+        row.category = event.target.value;
+        host.dataset.need = row.category ? "0" : "1";
+      }
+      importUpdateSummary();
+    });
+  }
+
+  function showCabinetImport() {
+    var menu = document.querySelector(".cabinet-menu");
+    var detail = document.getElementById("cabinetDetail");
+    if (!menu || !detail) return;
+    menu.hidden = true;
+    detail.hidden = false;
+    detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button>' +
+      '<h2 class="cabinet-detail-title">Імпорт виписки</h2>' +
+      '<div class="import-picker">' +
+      '<p class="import-note">monobank: у застосунку відкрийте картку → «Виписка» → період → «Надіслати» і збережіть CSV або XLSX. ' +
+      'ПриватБанк: Приват24 → «Виписки» → період → експорт у CSV.</p>' +
+      '<p class="import-note">Файл розбирається на вашому телефоні й нікуди не надсилається. ' +
+      'Імпортуються тільки витрати; перед записом ви побачите список і зможете зняти зайве.</p>' +
+      '<input type="file" id="importFile" accept=".csv,.xlsx,.xls" hidden />' +
+      '<button class="btn-primary" type="button" id="importPick">Обрати файл</button>' +
+      '<p class="import-note" id="importPickNote" aria-live="polite"></p>' +
+      '</div>';
+    document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+    var input = document.getElementById("importFile");
+    var note = document.getElementById("importPickNote");
+    document.getElementById("importPick").onclick = function () { input.click(); };
+    input.onchange = function () {
+      importHandleFile(input.files && input.files[0], note);
+      input.value = "";
+    };
+  }
+
   /* ============================ PIN ============================ */
 
   function hashPin(pin) {
@@ -2094,6 +2729,7 @@
           if (!ok) { if (onFallback) onFallback(); return; }
           sessionStorage.setItem("kopiyka_unlocked", "1");
           document.getElementById("pinGate").hidden = true;
+          if (state.ready) maybeStartOnboarding();
           focusAmount();
         });
       });
@@ -3026,6 +3662,8 @@
   function wire() {
     wireExpenseIconPicker();
     wireBlockHelp();
+    wireOnboarding();
+    wireImportSheet();
     setInterval(refreshCalendarDay, 60000);
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) refreshCalendarDay();
@@ -3134,6 +3772,7 @@
         if (target === "security") { showCabinetSecurity(); return; }
         if (target === "glossary") { showCabinetGlossary(); return; }
         if (target === "quick") { showCabinetQuick(); return; }
+        if (target === "import") { showCabinetImport(); return; }
         rememberViewScroll(state.view);
         state.view = "settings";
         document.querySelectorAll(".viewtab").forEach(function (tab) {
@@ -3321,6 +3960,7 @@
         if (h === settings().pin) {
           sessionStorage.setItem("kopiyka_unlocked", "1");
           document.getElementById("pinGate").hidden = true;
+          if (state.ready) maybeStartOnboarding();
           focusAmount();
         } else {
           document.getElementById("pinNote").textContent = "Не той PIN";
@@ -3372,7 +4012,7 @@
         seen[c] = true;
         if (!state.ready) return;
         if (c === "transactions" || c === "recurring") ensureExpenseCategoriesFromData();
-        if (c === "transactions") syncNavarHistory();
+        if (c === "transactions") { syncNavarHistory(); maybeStartOnboarding(); }
         renderAll();
         if (c === "recurring" || c === "transactions") postDueRecurring();
       }, function (down) { setSync(down ? "warn" : (store.offline ? "local" : "online")); });
@@ -3385,6 +4025,7 @@
       lockIfNeeded();
       if (state.ready) {
         syncNavarHistory();
+        maybeStartOnboarding();
         renderAll();
       }
     });
@@ -3395,6 +4036,7 @@
       ensureExpenseCategoriesFromData();
       postDueRecurring();
       renderAll();
+      maybeStartOnboarding();
       focusAmount();
       introOnce();
     }, 260);
@@ -3412,6 +4054,8 @@
     if (!shouldAutoFocusAmount()) return;
     if (!document.getElementById("pinGate").hidden) return;
     if (!document.getElementById("confirmBack").hidden) return;
+    var onb = document.getElementById("onboarding");
+    if (onb && !onb.hidden) return;
     if (document.activeElement && document.activeElement.tagName === "INPUT") return;
     var el = document.querySelector('#txForm input[name="amount"]');
     if (el) try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }

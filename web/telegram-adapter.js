@@ -212,9 +212,35 @@
       };
     }
 
+    // Імпорт виписки надсилає сотні рядків. Через звичайний add кожен із них
+    // тягнув би за собою повне вичитування стану, тож тут запис іде пачкою з
+    // обмеженою паралельністю, а стан оновлюється один раз у кінці.
+    function bulkAdd(name, rows) {
+      var list = (rows || []).slice();
+      var path = "/api/" + encodeURIComponent(name);
+      var index = 0;
+      var failed = 0;
+      function worker() {
+        if (index >= list.length) return Promise.resolve();
+        var row = list[index++];
+        return request(path, { method: "POST", body: JSON.stringify(row) })
+          .catch(function (error) { failed++; console.warn("Kopiyka bulk row failed", error && error.code); })
+          .then(worker);
+      }
+      var lanes = [];
+      for (var i = 0; i < Math.min(4, list.length); i++) lanes.push(worker());
+      return Promise.all(lanes)
+        .then(function () { return refresh().catch(function () {}); })
+        .then(function () {
+          if (failed && failed === list.length) throw Object.assign(new Error("Не вдалось записати жодного рядка."), { code: "bulk_failed" });
+          return { added: list.length - failed, failed: failed };
+        });
+    }
+
       return {
         offline: false,
         collection: collection,
+        bulkAdd: bulkAdd,
         exportAll: function () {
           return request("/api/export", { method: "GET" });
         },

@@ -11,6 +11,60 @@
   </form>
 </div>
 
+<div class="onboarding" id="onboarding" role="dialog" aria-modal="true" aria-labelledby="onbTitle" hidden>
+  <form class="onboarding-box" id="onboardingForm" novalidate>
+    <div class="onboarding-progress" aria-hidden="true">
+      <span class="onboarding-dot" data-onb-dot="1"></span>
+      <span class="onboarding-dot" data-onb-dot="2"></span>
+      <span class="onboarding-dot" data-onb-dot="3"></span>
+    </div>
+
+    <section class="onboarding-step" data-onb-step="1">
+      <h2 id="onbTitle">Скільки заходить на місяць?</h2>
+      <p class="onboarding-note">Орієнтовний дохід. Потрібен, щоб застосунок рахував, скільки лишилось до кінця місяця. Точну суму задасте пізніше.</p>
+      <input type="text" inputmode="decimal" id="onbIncome" autocomplete="off" placeholder="Наприклад, 25000" aria-label="Дохід за місяць" />
+    </section>
+
+    <section class="onboarding-step" data-onb-step="2" hidden>
+      <h2>Скільки готові витрачати на тиждень?</h2>
+      <p class="onboarding-note">Сума на щоденні витрати, без оренди та комуналки. Застосунок розкладе її по днях.</p>
+      <input type="text" inputmode="decimal" id="onbWeek" autocomplete="off" placeholder="Наприклад, 3000" aria-label="Бюджет на тиждень" />
+      <p class="onboarding-hint" id="onbWeekHint" aria-live="polite"></p>
+    </section>
+
+    <section class="onboarding-step" data-onb-step="3" hidden>
+      <h2>Запишіть першу витрату</h2>
+      <p class="onboarding-note">Будь-яку, хоч каву. Далі це буде швидше.</p>
+      <input type="text" inputmode="decimal" id="onbAmount" autocomplete="off" placeholder="Сума, ₴" aria-label="Сума витрати" />
+      <div class="onboarding-cats" id="onbCats" role="group" aria-label="Категорія витрати"></div>
+    </section>
+
+    <div class="onboarding-actions">
+      <button class="btn-primary" type="submit" id="onbNext">Далі</button>
+      <button class="btn onboarding-skip" type="button" id="onbSkip">Пропустити налаштування</button>
+    </div>
+  </form>
+</div>
+
+<div class="import-sheet" id="importSheet" role="dialog" aria-modal="true" aria-labelledby="importTitle" hidden>
+  <div class="import-box">
+    <header class="import-head">
+      <h2 id="importTitle">Перевірка виписки</h2>
+      <button class="icon-btn" type="button" id="importClose" aria-label="Закрити">✕</button>
+    </header>
+    <p class="import-summary" id="importSummary" aria-live="polite"></p>
+    <div class="import-bulk">
+      <button class="btn" type="button" data-import-all="1">Позначити всі</button>
+      <button class="btn" type="button" data-import-all="0">Зняти всі</button>
+    </div>
+    <div class="import-rows" id="importRows"></div>
+    <footer class="import-actions">
+      <button class="btn-primary" type="button" id="importConfirm">Імпортувати</button>
+      <p class="import-note" id="importProgress" aria-live="polite"></p>
+    </footer>
+  </div>
+</div>
+
 <div class="app" id="app">
   <header class="topbar dashboard-header" data-help-key="dashboard-date">
     <div class="dashboard-brand" aria-label="Wallet">
@@ -302,6 +356,7 @@
         <button class="cabinet-row" type="button" data-cabinet-target="glossary">Мій словник <span>›</span></button>
         <button class="cabinet-row" type="button" data-cabinet-target="limits">Ліміти <span>›</span></button>
         <button class="cabinet-row" type="button" data-cabinet-target="quick">Швидкий запис <span>›</span></button>
+        <button class="cabinet-row" type="button" data-cabinet-target="import">Імпорт виписки <span>›</span></button>
       </div>
       <div id="cabinetDetail" hidden></div>
       <p class="cabinet-support">Питання? <a href="https://t.me/mriya7" id="cabinetSupport">Напишіть у підтримку</a></p>
