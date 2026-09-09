@@ -3761,10 +3761,10 @@
         '<div class="quick-value-actions"><button class="btn" type="button" id="quickCopyUrl">Копіювати URL</button></div></div>' +
         '<ol class="quick-instructions">' +
         '<li>Відкрийте «Команди» (Shortcuts) і створіть нову.</li>' +
-        '<li>Додайте дію «Запитати текст» (Ask for Input) з підказкою «Витрата».</li>' +
+        '<li>Додайте дію «Запитати текст» (Ask for Input) з підказкою «Що витратив?».</li>' +
         '<li>Додайте «Отримати вміст URL» (Get Contents of URL) і вставте адресу вище.</li>' +
-        '<li>Розгорніть її, виберіть метод <code>POST</code>, у Headers додайте ключ <code>X-Quick-Token</code> і вставте токен.</li>' +
-        '<li>Request Body → JSON, поле <code>text</code> зі значенням «Запитаний текст» (Provided Input).</li>' +
+        '<li>Розгорніть її та виберіть метод <code>POST</code>. Заголовки не чіпайте — вони не потрібні.</li>' +
+        '<li>Тіло запиту → <code>JSON</code>, і додайте два поля: <code>token</code> зі значенням вашого токена та <code>text</code> зі змінною «Запитаний текст» (Provided Input).</li>' +
         '<li>Додайте «Отримати значення зі словника» (Get Dictionary Value) з ключем <code>reply</code>, а після неї «Показати сповіщення».</li>' +
         '</ol>' +
         '<p class="setting-note">Далі додайте команду на екран «Додому» або в віджет — і витрата записується одним дотиком.</p></details>' +

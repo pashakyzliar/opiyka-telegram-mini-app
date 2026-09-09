@@ -202,10 +202,19 @@ function normalizeQuickToken(raw) {
 // Замість голого null повертаємо причину: без неї «токен не підійшов» однаково
 // звучить і коли заголовок узагалі не дійшов, і коли він зіпсований, і коли
 // його просто відкликали — а лікуються ці три випадки по-різному.
-async function quickAuth(req) {
-  const raw = req.headers["x-quick-token"];
+async function quickAuth(req, payload) {
+  // Токен приймається двома шляхами: заголовком і полем у тілі. Заголовки в
+  // Shortcuts налаштовуються вручну й легко ламаються, тому тіло — основний
+  // шлях, а заголовок лишається для сумісності з уже створеними командами.
+  const header = req.headers["x-quick-token"];
+  const body = payload && payload.token;
+  const raw = (header !== undefined && String(header).trim() !== "") ? header : body;
   if (raw === undefined || raw === null || String(raw).trim() === "") {
-    return { error: "token_missing" };
+    return {
+      error: "token_missing",
+      headerSeen: header !== undefined,
+      bodySeen: body !== undefined
+    };
   }
   const token = normalizeQuickToken(raw);
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) {
@@ -615,9 +624,16 @@ function quickError(res, status, code, reply) {
 }
 
 async function quickApi(req, res) {
-  const result = await quickAuth(req);
+  const payload = await bodyJson(req, 16 * 1024);
+  const result = await quickAuth(req, payload);
   if (result.error === "token_missing") {
-    return quickError(res, 401, "token_missing", "Заголовок X-Quick-Token не дійшов до сервера. Перевірте назву заголовка в команді — без пробілів і саме так.");
+    const detail = result.headerSeen
+      ? "Заголовок X-Quick-Token дійшов, але порожній — змінна в ньому не підставилась."
+      : result.bodySeen
+        ? "Поле token у тілі запиту порожнє."
+        : "Токен не надіслано.";
+    return quickError(res, 401, "token_missing",
+      detail + " Найпростіше: приберіть заголовок зовсім і додайте в JSON друге поле з ключем token і токеном у значенні.");
   }
   if (result.error === "token_malformed") {
     return quickError(res, 401, "token_malformed",
@@ -633,7 +649,6 @@ async function quickApi(req, res) {
   if (!auth.telegram_chat_id) {
     return quickError(res, 401, "chat_not_linked", "Чат із ботом не привʼязаний. Відкрийте бота, натисніть «Почати», потім створіть токен ще раз.");
   }
-  const payload = await bodyJson(req, 16 * 1024);
   // probe — перевірка налаштування з самого Mini App: підтверджує, що токен
   // робочий і що бот може написати користувачу. Витрату не створює і квоту
   // AI не витрачає, бо перевіряти треба саме зв'язок, а не розбір тексту.
