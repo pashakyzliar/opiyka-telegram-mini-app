@@ -3740,13 +3740,17 @@
           '<p class="import-note" id="quickProbeNote" aria-live="polite"></p>'
         : '';
 
-      var install = ios && hasToken && data.shortcutIcloudUrl
+      // Кнопку показуємо на будь-якій платформі: посилання однаково працює на
+      // iPhone, iPad і Mac. Прив'язка до ios лише ховала б її від людини з
+      // iPad, яка відкрила Mini App з планшета.
+      var install = hasToken && data.shortcutIcloudUrl
         ? '<button class="btn-primary" type="button" id="quickInstall">Додати команду на iPhone</button>' +
-          '<p class="setting-note">iOS попередить, що команда звертається до мережі — це нормально.</p>' : '';
+          '<p class="setting-note">Токен уже скопійовано в буфер. Під час додавання iOS запитає «Вставте токен з Копійки» — торкніться поля й натисніть «Вставити». Попередження про звернення до мережі — це нормально.</p>'
+        : '';
 
       var platformNote = data.shortcutIcloudUrl
-        ? (ios ? '' : '<p class="setting-note">Готова команда додається лише з Telegram на iPhone. З іншого пристрою скористайтесь ручним налаштуванням нижче.</p>')
-        : '<p class="setting-note">Готової команди поки немає — налаштуйте вручну за шістьма кроками нижче. Це одноразово, займає хвилини три.</p>';
+        ? (ios ? '' : '<p class="setting-note">Додавати команду треба з iPhone або iPad. З іншого пристрою скористайтесь ручним налаштуванням нижче.</p>')
+        : '<p class="setting-note">Готової команди поки немає — налаштуйте вручну за кроками нижче. Це одноразово, займає хвилини три.</p>';
 
       detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button>' +
         '<h2 class="cabinet-detail-title">Швидкий запис з iPhone</h2>' +
@@ -3821,9 +3825,15 @@
 
       var installButton = document.getElementById("quickInstall");
       if (installButton) installButton.onclick = function () {
+        // Порядок важливий: спершу токен у буфер, потім перехід. Інакше
+        // людина опиниться на питанні імпорту з порожнім буфером.
+        // Посилання відкриваємо в будь-якому разі — навіть якщо буфер не
+        // дався, токен видно на екрані й його можна ввести руками.
         copyQuickValue(quickTokenForSession, "quickTokenValue").then(function () {
           if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        }).catch(function () {}).then(function () {
           if (tg && tg.openLink) tg.openLink(data.shortcutIcloudUrl);
+          else window.open(data.shortcutIcloudUrl, "_blank");
         });
       };
 
