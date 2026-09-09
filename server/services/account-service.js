@@ -50,7 +50,11 @@ async function getProfile(client, userId) {
 
 async function bindTelegramChat(client, userId, telegramId) { return repository.bindTelegramChat(client, userId, telegramId); }
 async function generateQuickToken(client, userId) {
-  const token = crypto.randomBytes(24).toString("base64url");
+  // Тільки цифри й латиниця в нижньому регістрі. base64url складається з
+  // дефісів і підкреслень, а iOS у полях Shortcuts підміняє дефіс на
+  // типографське тире — візуально те саме, для сервера вже інший рядок.
+  // 24 байти ентропії лишаються, змінюється лише алфавіт.
+  const token = crypto.randomBytes(24).toString("hex");
   await repository.setQuickToken(client, userId, crypto.createHash("sha256").update(token).digest("hex"));
   return token;
 }

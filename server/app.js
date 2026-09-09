@@ -189,16 +189,35 @@ function quickHash(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+// iOS дорогою підміняє символи: дефіс стає типографським тире, у вставлений
+// текст пролазять нерозривні пробіли й нулювої ширини символи. Повертаємо їх
+// назад, інакше візуально правильний токен не проходить перевірку.
+function normalizeQuickToken(raw) {
+  return String(raw == null ? "" : raw)
+    .replace(/[‐-―−﹘﹣－]/g, "-")
+    .replace(/[​-‍﻿­]/g, "")
+    .replace(/\s+/g, "");
+}
+
+// Замість голого null повертаємо причину: без неї «токен не підійшов» однаково
+// звучить і коли заголовок узагалі не дійшов, і коли він зіпсований, і коли
+// його просто відкликали — а лікуються ці три випадки по-різному.
 async function quickAuth(req) {
-  const token = String(req.headers["x-quick-token"] || "").trim();
-  if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) return null;
+  const raw = req.headers["x-quick-token"];
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return { error: "token_missing" };
+  }
+  const token = normalizeQuickToken(raw);
+  if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) {
+    return { error: "token_malformed", length: token.length };
+  }
   const hash = quickHash(token);
   const found = await withTransaction((client) => accountService.findQuickToken(client, hash));
-  if (!found || !found.stored_hash) return null;
+  if (!found || !found.stored_hash) return { error: "token_unknown" };
   const actual = Buffer.from(String(found.stored_hash));
   const expected = Buffer.from(hash);
-  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
-  return found;
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return { error: "token_unknown" };
+  return { user: found };
 }
 
 async function botGlossary(telegramId) {
@@ -596,7 +615,18 @@ function quickError(res, status, code, reply) {
 }
 
 async function quickApi(req, res) {
-  const auth = await quickAuth(req);
+  const result = await quickAuth(req);
+  if (result.error === "token_missing") {
+    return quickError(res, 401, "token_missing", "Заголовок X-Quick-Token не дійшов до сервера. Перевірте назву заголовка в команді — без пробілів і саме так.");
+  }
+  if (result.error === "token_malformed") {
+    return quickError(res, 401, "token_malformed",
+      "Токен зіпсований (символів: " + result.length + "). Найчастіше iOS підмінив дефіс на тире: вимкніть «Розумну пунктуацію» в Налаштуваннях → Клавіатура і вставте токен заново.");
+  }
+  if (result.error) {
+    return quickError(res, 401, "token_unknown", "Такого токена немає. Створіть новий у Копійці: Кабінет → Швидкий запис — і замініть його в команді.");
+  }
+  const auth = result.user;
   if (!auth || !auth.user_id) {
     return quickError(res, 401, "unauthorized", "Токен не підійшов. Створіть новий у Копійці: Кабінет → Швидкий запис.");
   }
