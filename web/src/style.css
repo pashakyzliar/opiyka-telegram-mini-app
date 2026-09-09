@@ -771,6 +771,35 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .glossary-row small { display:block; margin-top:3px; color:var(--ink-muted); }
 .quick-token { display:flex; gap:8px; align-items:center; margin:12px 0; padding:9px; border:1px solid var(--hair); border-radius:10px; overflow:hidden; }
 .quick-token code { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Токен і адресу треба бачити цілком: у Telegram копіювання в буфер
+   спрацьовує не завжди, і єдиний надійний шлях — виділити текст пальцем. */
+.quick-value {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--hair-strong);
+  border-radius: 14px;
+  background: var(--panel-2);
+}
+.quick-value-label {
+  color: var(--ink-muted);
+  font: 500 10px/1 system-ui, sans-serif;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.quick-value code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font: 500 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  user-select: all;
+  -webkit-user-select: all;
+}
+.quick-value-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.quick-value-actions .btn { min-height: 44px; padding: 0 14px; }
+.quick-value .setting-note { margin-top: 0; }
 .quick-instructions { padding-left:20px; font-size:12px; line-height:1.55; color:var(--ink-soft); }
 .cabinet-detail-title + .setting-note { margin-top:0; }
 @media (max-width:720px) { .glossary-row { grid-template-columns:minmax(0,1fr) auto auto; } .glossary-row select { grid-column:1 / -1; } }

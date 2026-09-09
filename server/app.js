@@ -592,13 +592,25 @@ async function quickApi(req, res) {
   const auth = await quickAuth(req);
   if (!auth || !auth.user_id || !auth.telegram_chat_id) return errorJson(res, 401, "unauthorized", "Quick token is invalid or Telegram chat is not linked");
   const payload = await bodyJson(req, 16 * 1024);
+  // probe — перевірка налаштування з самого Mini App: підтверджує, що токен
+  // робочий і що бот може написати користувачу. Витрату не створює і квоту
+  // AI не витрачає, бо перевіряти треба саме зв'язок, а не розбір тексту.
+  const probe = !!(payload && payload.probe);
   const text = String(payload && payload.text || "").trim();
   const clientId = String(payload && payload.clientId || "").trim();
-  if (!text || text.length > 1000) return errorJson(res, 400, "bad_request", "Text is required");
+  if (!probe && (!text || text.length > 1000)) return errorJson(res, 400, "bad_request", "Text is required");
   if (clientId && !/^[A-Za-z0-9_-]{1,80}$/.test(clientId)) return errorJson(res, 400, "bad_request", "clientId is invalid");
   const rate = await withUserIdContext(auth.user_id, true, (client, userId) => accountService.registerQuickRequest(client, userId, clientId));
   if (!rate.allowed) return errorJson(res, 429, "rate_limited", "Зачекайте кілька секунд або спробуйте пізніше.");
   if (rate.duplicate) return json(res, 200, { ok: true, reply: "Запит уже прийнято. Перевірте чат із ботом." });
+  if (probe) {
+    try {
+      await sendBotMessage(auth.telegram_chat_id, "Швидкий запис підключено. Тепер команда з iPhone надсилатиме витрати сюди.");
+      return json(res, 200, { ok: true, reply: "Готово. Перевірочне повідомлення надіслано в чат із ботом." });
+    } catch (error) {
+      return errorJson(res, 502, "bot_unreachable", "Токен робочий, але бот не може вам написати. Відкрийте чат із ботом і натисніть «Почати».");
+    }
+  }
   try {
     await handleBotWrite({ text, from: { id: String(auth.telegram_chat_id) }, chat: { id: String(auth.telegram_chat_id), type: "private" } });
     return json(res, 200, { ok: true, reply: "Запис оброблено. Деталі — у чаті з ботом." });

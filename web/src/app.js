@@ -3608,9 +3608,88 @@
   }
 
   var quickTokenForSession = "";
-  function copyQuickValue(value) {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) return Promise.reject(new Error("clipboard_unavailable"));
-    return navigator.clipboard.writeText(value).then(function () { showError("Швидкий запис", "Скопійовано."); });
+
+  /* navigator.clipboard у Telegram WebView доступний не завжди: на iOS він
+     часто відсутній або мовчки відхиляє запис поза «довіреним» жестом. Тому
+     спершу пробуємо його, а на невдачі — прихований textarea з execCommand,
+     який працює й у старих webview. Якщо не вийшло й це — не мовчимо, а
+     виділяємо текст на екрані, щоб людина скопіювала його вручну. */
+  function copyQuickFallback(value) {
+    var area = document.createElement("textarea");
+    area.value = value;
+    area.setAttribute("readonly", "readonly");
+    area.style.position = "fixed";
+    area.style.top = "-1000px";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    var ok = false;
+    try {
+      area.focus();
+      area.select();
+      area.setSelectionRange(0, value.length);
+      ok = document.execCommand("copy");
+    } catch (e) { ok = false; }
+    area.remove();
+    return ok;
+  }
+
+  function selectQuickText(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch (e) {}
+  }
+
+  function copyQuickValue(value, selectId) {
+    var text = String(value || "");
+    if (!text) return Promise.reject(new Error("empty"));
+    function done() { showError("Швидкий запис", "Скопійовано."); return true; }
+    function manual() {
+      selectQuickText(selectId);
+      showError("Швидкий запис", "Скопіюйте виділений текст вручну — Telegram не дав доступ до буфера.");
+      return false;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(done).catch(function () {
+        return copyQuickFallback(text) ? done() : manual();
+      });
+    }
+    return Promise.resolve(copyQuickFallback(text) ? done() : manual());
+  }
+
+  function quickErrorText(error) {
+    var code = error && error.code;
+    if (code === "unauthorized") return "Токен не підійшов. Створіть новий і замініть його в команді.";
+    if (code === "bot_unreachable") return "Бот не може вам написати. Відкрийте чат із ботом і натисніть «Почати».";
+    if (code === "rate_limited") return "Забагато запитів. Спробуйте за хвилину.";
+    if (code === "http_404") return "Сервер не знає цього маршруту — оновіть застосунок і спробуйте ще раз.";
+    return (error && error.message) || "Не вдалося виконати запит.";
+  }
+
+  // Перевірка йде тим самим шляхом, що й команда з iPhone: той самий URL,
+  // той самий заголовок. Тому якщо вона проходить — пройде і Shortcut.
+  function quickProbe(endpoint, token) {
+    return fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Quick-Token": token },
+      body: JSON.stringify({ probe: true })
+    }).then(function (response) {
+      return response.text().then(function (raw) {
+        var data = null;
+        try { data = raw ? JSON.parse(raw) : null; } catch (e) {}
+        if (!response.ok) {
+          throw Object.assign(new Error((data && data.error) || ("HTTP " + response.status)), {
+            code: (data && data.code) || ("http_" + response.status)
+          });
+        }
+        return data || {};
+      });
+    });
   }
 
   function showCabinetQuick() {
@@ -3625,38 +3704,136 @@
       var tg = window.Telegram && window.Telegram.WebApp;
       var ios = !!(tg && tg.platform === "ios");
       var endpoint = String(data.publicUrl || window.location.origin).replace(/\/$/, "") + "/api/quick";
-      var tokenBox = quickTokenForSession
-        ? '<div class="quick-token"><code id="quickTokenValue">' + esc(quickTokenForSession) + '</code><button class="btn" type="button" id="quickCopyToken">Копіювати</button></div>'
-        : (data.active ? '<p class="setting-note">Токен приховано. Створіть новий, якщо загубили.</p>' : '');
-      var install = ios && quickTokenForSession && data.shortcutIcloudUrl
-        ? '<button class="btn-primary" type="button" id="quickInstall">Додати команду на iPhone</button><p class="setting-note">iOS попередить, що команда звертається до мережі — це нормально.</p>' : '';
-      var platformNote = ios ? '' : '<p class="setting-note">Автоматичне додавання доступне лише в Telegram на iPhone.</p>';
-      detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button><h2 class="cabinet-detail-title">Швидкий запис з iPhone</h2>' +
-        '<p class="setting-note">Додавайте витрати з віджета, не відкриваючи Telegram. Відповідь і вибір категорії з’являться в чаті з ботом.</p>' +
-        tokenBox + '<button class="btn-primary" type="button" id="quickCreate">Створити новий токен</button>' + install + platformNote +
-        '<details' + (!data.shortcutIcloudUrl ? ' open' : '') + '><summary>Не вийшло? Створити вручну</summary><ol class="quick-instructions"><li>Відкрийте «Команди» / Shortcuts і створіть нову команду.</li><li>Додайте «Запитати текст» / Ask for Input з підказкою «Витрата».</li><li>Додайте «Отримати вміст URL» / Get Contents of URL: <code>' + esc(endpoint) + '</code>.</li><li>Виберіть POST, у Headers додайте <code>X-Quick-Token</code> і вставте токен.</li><li>У JSON Body додайте <code>text</code> зі змінною «Запитаний текст» / Provided Input.</li><li>Додайте «Отримати значення зі словника» / Get Dictionary Value, ключ <code>reply</code>, потім «Показати сповіщення» / Show Notification.</li></ol><button class="btn" type="button" id="quickCopyUrl">Копіювати URL</button></details>' +
-        (data.active ? '<button class="btn" type="button" id="quickRevoke">Відкликати токен</button><p class="setting-note">Після відкликання команду перевстановлювати не треба: замініть значення заголовка X-Quick-Token у її налаштуваннях.</p>' : '') +
-        '<p class="setting-note">На екрані блокування iPhone все одно попросить розблокувати пристрій — це обмеження iOS.</p>';
+      var hasToken = !!quickTokenForSession;
+
+      // Токен показуємо повністю й у кілька рядків: у Telegram копіювання в
+      // буфер спрацьовує не завжди, тож людина мусить бачити весь рядок,
+      // щоб виділити його пальцем.
+      var tokenBox = hasToken
+        ? '<div class="quick-value"><span class="quick-value-label">Ваш токен</span>' +
+          '<code id="quickTokenValue">' + esc(quickTokenForSession) + '</code>' +
+          '<div class="quick-value-actions">' +
+          '<button class="btn" type="button" id="quickCopyToken">Копіювати токен</button>' +
+          '<button class="btn" type="button" id="quickCopyBoth">Копіювати URL і токен</button>' +
+          '</div>' +
+          '<p class="setting-note">Збережіть його зараз: після виходу з екрана токен більше не показується — на сервері лежить лише його хеш.</p></div>'
+        : (data.active
+          ? '<p class="setting-note">Токен уже створений, але його не видно: сервер зберігає тільки хеш. Якщо ви його загубили — створіть новий, старий одразу перестане діяти.</p>'
+          : '<p class="setting-note">Токен ще не створений.</p>');
+
+      var probeBlock = hasToken
+        ? '<button class="btn-primary" type="button" id="quickProbe">Перевірити підключення</button>' +
+          '<p class="import-note" id="quickProbeNote" aria-live="polite"></p>'
+        : '';
+
+      var install = ios && hasToken && data.shortcutIcloudUrl
+        ? '<button class="btn-primary" type="button" id="quickInstall">Додати команду на iPhone</button>' +
+          '<p class="setting-note">iOS попередить, що команда звертається до мережі — це нормально.</p>' : '';
+
+      var platformNote = data.shortcutIcloudUrl
+        ? (ios ? '' : '<p class="setting-note">Готова команда додається лише з Telegram на iPhone. З іншого пристрою скористайтесь ручним налаштуванням нижче.</p>')
+        : '<p class="setting-note">Готової команди поки немає — налаштуйте вручну за шістьма кроками нижче. Це одноразово, займає хвилини три.</p>';
+
+      detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button>' +
+        '<h2 class="cabinet-detail-title">Швидкий запис з iPhone</h2>' +
+        '<p class="setting-note">Команда в «Швидких командах» надсилає витрату сюди, не відкриваючи Telegram. Підтвердження й вибір категорії приходять у чат із ботом.</p>' +
+        '<p class="setting-note">Спершу відкрийте чат із ботом і натисніть «Почати» — інакше йому нема куди вам відповідати.</p>' +
+        tokenBox +
+        '<button class="' + (hasToken ? "btn" : "btn-primary") + '" type="button" id="quickCreate">' +
+        (data.active || hasToken ? "Створити новий токен" : "Створити токен") + '</button>' +
+        probeBlock + install + platformNote +
+        '<details' + (!data.shortcutIcloudUrl ? ' open' : '') + '><summary>Налаштувати команду вручну</summary>' +
+        '<div class="quick-value"><span class="quick-value-label">Адреса запиту</span><code id="quickUrlValue">' + esc(endpoint) + '</code>' +
+        '<div class="quick-value-actions"><button class="btn" type="button" id="quickCopyUrl">Копіювати URL</button></div></div>' +
+        '<ol class="quick-instructions">' +
+        '<li>Відкрийте «Команди» (Shortcuts) і створіть нову.</li>' +
+        '<li>Додайте дію «Запитати текст» (Ask for Input) з підказкою «Витрата».</li>' +
+        '<li>Додайте «Отримати вміст URL» (Get Contents of URL) і вставте адресу вище.</li>' +
+        '<li>Розгорніть її, виберіть метод <code>POST</code>, у Headers додайте ключ <code>X-Quick-Token</code> і вставте токен.</li>' +
+        '<li>Request Body → JSON, поле <code>text</code> зі значенням «Запитаний текст» (Provided Input).</li>' +
+        '<li>Додайте «Отримати значення зі словника» (Get Dictionary Value) з ключем <code>reply</code>, а після неї «Показати сповіщення».</li>' +
+        '</ol>' +
+        '<p class="setting-note">Далі додайте команду на екран «Додому» або в віджет — і витрата записується одним дотиком.</p></details>' +
+        (data.active ? '<button class="btn" type="button" id="quickRevoke">Відкликати токен</button>' +
+          '<p class="setting-note">Після відкликання команду перевстановлювати не треба: достатньо замінити значення заголовка X-Quick-Token у її налаштуваннях.</p>' : '') +
+        '<p class="setting-note">На заблокованому екрані iPhone усе одно попросить розблокувати пристрій — це обмеження iOS.</p>';
+
       document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
-      document.getElementById("quickCreate").onclick = function () {
-        request("/api/quick/token", { method: "POST", body: "{}" }).then(function (created) {
-          quickTokenForSession = created.token || "";
+
+      var createButton = document.getElementById("quickCreate");
+      createButton.onclick = function () {
+        if (createButton.disabled) return;
+        createButton.disabled = true;
+        createButton.textContent = "Створюю…";
+        request("/api/quick/token", { method: "POST", body: JSON.stringify({}) }).then(function (created) {
+          if (!created || !created.token) throw Object.assign(new Error("Сервер не повернув токен."), { code: "empty_token" });
+          quickTokenForSession = created.token;
           showCabinetQuick();
-        }).catch(function (e) { reportFailure("швидкий запис", e); });
+        }).catch(function (error) {
+          console.error("[Копійка] швидкий запис:", error);
+          createButton.disabled = false;
+          createButton.textContent = "Створити новий токен";
+          showError("Швидкий запис", quickErrorText(error));
+        });
       };
+
       var copyToken = document.getElementById("quickCopyToken");
-      if (copyToken) copyToken.onclick = function () { copyQuickValue(quickTokenForSession).catch(function () { showError("Швидкий запис", "Не вдалося скопіювати токен."); }); };
-      document.getElementById("quickCopyUrl").onclick = function () { copyQuickValue(endpoint).catch(function () { showError("Швидкий запис", "Не вдалося скопіювати URL."); }); };
+      if (copyToken) copyToken.onclick = function () { copyQuickValue(quickTokenForSession, "quickTokenValue"); };
+      var copyBoth = document.getElementById("quickCopyBoth");
+      if (copyBoth) copyBoth.onclick = function () {
+        copyQuickValue("URL: " + endpoint + "\nX-Quick-Token: " + quickTokenForSession, "quickTokenValue");
+      };
+      var copyUrl = document.getElementById("quickCopyUrl");
+      if (copyUrl) copyUrl.onclick = function () { copyQuickValue(endpoint, "quickUrlValue"); };
+
+      var probeButton = document.getElementById("quickProbe");
+      if (probeButton) probeButton.onclick = function () {
+        var note = document.getElementById("quickProbeNote");
+        probeButton.disabled = true;
+        probeButton.textContent = "Перевіряю…";
+        if (note) note.textContent = "";
+        quickProbe(endpoint, quickTokenForSession).then(function (result) {
+          probeButton.disabled = false;
+          probeButton.textContent = "Перевірити ще раз";
+          if (note) note.textContent = (result && result.reply) || "Готово.";
+          if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+        }).catch(function (error) {
+          console.error("[Копійка] перевірка швидкого запису:", error);
+          probeButton.disabled = false;
+          probeButton.textContent = "Перевірити підключення";
+          if (note) note.textContent = quickErrorText(error);
+        });
+      };
+
       var installButton = document.getElementById("quickInstall");
       if (installButton) installButton.onclick = function () {
-        copyQuickValue(quickTokenForSession).then(function () {
+        copyQuickValue(quickTokenForSession, "quickTokenValue").then(function () {
           if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-          tg.openLink(data.shortcutIcloudUrl);
-        }).catch(function () { showError("Швидкий запис", "Спочатку скопіюйте токен кнопкою вище."); });
+          if (tg && tg.openLink) tg.openLink(data.shortcutIcloudUrl);
+        });
       };
+
       var revoke = document.getElementById("quickRevoke");
-      if (revoke) revoke.onclick = function () { confirmBox("Відкликати токен? Стара команда перестане працювати.").then(function (ok) { if (!ok) return; request("/api/quick/token", { method: "DELETE" }).then(function () { quickTokenForSession = ""; showCabinetQuick(); }).catch(function (e) { reportFailure("швидкий запис", e); }); }); };
-    }).catch(function (e) { reportFailure("швидкий запис", e); });
+      if (revoke) revoke.onclick = function () {
+        confirmBox("Відкликати токен? Стара команда перестане працювати.").then(function (ok) {
+          if (!ok) return;
+          request("/api/quick/token", { method: "DELETE" }).then(function () {
+            quickTokenForSession = "";
+            showCabinetQuick();
+          }).catch(function (error) { showError("Швидкий запис", quickErrorText(error)); });
+        });
+      };
+    }).catch(function (error) {
+      // Без цього екран назавжди лишався на «Завантаження…», і виглядало це
+      // як «кнопка нічого не робить».
+      console.error("[Копійка] швидкий запис:", error);
+      detail.innerHTML = '<button class="btn" type="button" id="cabinetBack">‹ Кабінет</button>' +
+        '<h2 class="cabinet-detail-title">Швидкий запис з iPhone</h2>' +
+        '<p class="import-note">' + esc(quickErrorText(error)) + '</p>' +
+        '<button class="btn-primary" type="button" id="quickRetry">Спробувати ще раз</button>';
+      document.getElementById("cabinetBack").onclick = function () { detail.hidden = true; menu.hidden = false; };
+      document.getElementById("quickRetry").onclick = showCabinetQuick;
+    });
   }
 
   function wire() {

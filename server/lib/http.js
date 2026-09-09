@@ -20,7 +20,9 @@ function errorJson(res, status, code, message) {
 function corsHeaders(res, origin) {
   if (!origin) return;
   res.setHeader("Access-Control-Allow-Origin", origin);
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Telegram-Init-Data, Authorization, X-Dev-User-Id");
+  // X-Quick-Token потрібен, коли Mini App і API стоять на різних доменах:
+  // без нього перевірка швидкого запису з самого застосунку не пройде preflight.
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Telegram-Init-Data, Authorization, X-Dev-User-Id, X-Quick-Token");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   res.setHeader("Vary", "Origin");
 }
