@@ -588,9 +588,21 @@ async function api(req, res, pathname) {
   return errorJson(res, 405, "method_not_allowed", "Method not allowed");
 }
 
+// Єдиний споживач цього маршруту — команда Shortcuts, яка вміє показати рівно
+// одне поле. Тому в кожній відповіді, включно з помилками, має бути `reply`:
+// інакше на iPhone сповіщення просто порожнє і людина не знає, що сталося.
+function quickError(res, status, code, reply) {
+  return json(res, status, { ok: false, error: reply, code, reply });
+}
+
 async function quickApi(req, res) {
   const auth = await quickAuth(req);
-  if (!auth || !auth.user_id || !auth.telegram_chat_id) return errorJson(res, 401, "unauthorized", "Quick token is invalid or Telegram chat is not linked");
+  if (!auth || !auth.user_id) {
+    return quickError(res, 401, "unauthorized", "Токен не підійшов. Створіть новий у Копійці: Кабінет → Швидкий запис.");
+  }
+  if (!auth.telegram_chat_id) {
+    return quickError(res, 401, "chat_not_linked", "Чат із ботом не привʼязаний. Відкрийте бота, натисніть «Почати», потім створіть токен ще раз.");
+  }
   const payload = await bodyJson(req, 16 * 1024);
   // probe — перевірка налаштування з самого Mini App: підтверджує, що токен
   // робочий і що бот може написати користувачу. Витрату не створює і квоту
@@ -598,25 +610,32 @@ async function quickApi(req, res) {
   const probe = !!(payload && payload.probe);
   const text = String(payload && payload.text || "").trim();
   const clientId = String(payload && payload.clientId || "").trim();
-  if (!probe && (!text || text.length > 1000)) return errorJson(res, 400, "bad_request", "Text is required");
-  if (clientId && !/^[A-Za-z0-9_-]{1,80}$/.test(clientId)) return errorJson(res, 400, "bad_request", "clientId is invalid");
+  if (!probe && (!text || text.length > 1000)) return quickError(res, 400, "bad_request", "Порожній або задовгий текст витрати.");
+  if (clientId && !/^[A-Za-z0-9_-]{1,80}$/.test(clientId)) return quickError(res, 400, "bad_request", "Некоректний clientId.");
   const rate = await withUserIdContext(auth.user_id, true, (client, userId) => accountService.registerQuickRequest(client, userId, clientId));
-  if (!rate.allowed) return errorJson(res, 429, "rate_limited", "Зачекайте кілька секунд або спробуйте пізніше.");
+  if (!rate.allowed) return quickError(res, 429, "rate_limited", "Забагато запитів. Спробуйте за хвилину.");
   if (rate.duplicate) return json(res, 200, { ok: true, reply: "Запит уже прийнято. Перевірте чат із ботом." });
   if (probe) {
     try {
       await sendBotMessage(auth.telegram_chat_id, "Швидкий запис підключено. Тепер команда з iPhone надсилатиме витрати сюди.");
       return json(res, 200, { ok: true, reply: "Готово. Перевірочне повідомлення надіслано в чат із ботом." });
     } catch (error) {
-      return errorJson(res, 502, "bot_unreachable", "Токен робочий, але бот не може вам написати. Відкрийте чат із ботом і натисніть «Почати».");
+      console.error("Quick probe:", error && error.message);
+      return quickError(res, 502, "bot_unreachable", "Токен робочий, але бот не може вам написати. Відкрийте чат із ботом і натисніть «Почати».");
     }
   }
   try {
     await handleBotWrite({ text, from: { id: String(auth.telegram_chat_id) }, chat: { id: String(auth.telegram_chat_id), type: "private" } });
-    return json(res, 200, { ok: true, reply: "Запис оброблено. Деталі — у чаті з ботом." });
+    return json(res, 200, { ok: true, reply: "Записано. Деталі — у чаті з ботом." });
   } catch (error) {
+    console.error("Quick write:", error && error.code, error && error.message);
     const status = error.code === "rate_limited" ? 429 : error.code === "not_granted" ? 503 : 502;
-    return errorJson(res, status, error.code || "quick_write_failed", error.message || "Не вдалося додати витрату");
+    const reply = error.code === "not_granted"
+      ? "AI на сервері не налаштовано, тому розібрати текст нема кому."
+      : error.code === "rate_limited"
+        ? "Ліміт AI-запитів вичерпано. Спробуйте пізніше."
+        : "Не вдалося додати витрату. Спробуйте ще раз.";
+    return quickError(res, status, error.code || "quick_write_failed", reply);
   }
 }
 
@@ -643,6 +662,16 @@ function createAppServer() {
         return errorJson(res, mapped.status || 500, mapped.code || "server_error", mapped.message || "Server error");
       }
       console.error("Request error:", url.pathname, mapped && mapped.code, mapped && mapped.message);
+      // Shortcuts читає тільки `reply`, тож навіть на непередбаченій помилці
+      // цей маршрут має повернути щось, що видно на екрані iPhone.
+      if (url.pathname === "/api/quick") {
+        return json(res, 500, {
+          ok: false,
+          code: "server_error",
+          error: "Внутрішня помилка сервера.",
+          reply: "Внутрішня помилка сервера. Спробуйте ще раз."
+        });
+      }
       return errorJson(res, 500, "server_error", "Внутрішня помилка сервера. Спробуйте ще раз.");
     }
   });
