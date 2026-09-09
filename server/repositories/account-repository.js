@@ -332,7 +332,13 @@ async function bindTelegramChat(client, userId, telegramId) {
 }
 
 async function setQuickToken(client, userId, hash) {
-  await client.query("UPDATE users SET quick_token_hash = $2, quick_token_created_at = CASE WHEN $2 IS NULL THEN NULL ELSE now() END WHERE id = $1", [userId, hash || null]);
+  // $2 згадується двічі, і другий раз — усередині IS NULL, який типу не дає.
+  // Без явного ::text PostgreSQL лишає параметр нерозвʼязаним і падає з
+  // «could not determine data type of parameter $2».
+  await client.query(
+    "UPDATE users SET quick_token_hash = $2::text, quick_token_created_at = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END WHERE id = $1",
+    [userId, hash || null]
+  );
 }
 
 async function quickTokenStatus(client, userId) {
@@ -353,7 +359,9 @@ async function registerQuickRequest(client, userId, clientId) {
   }
   const count = await client.query("SELECT count(*)::integer AS count FROM quick_request_log WHERE user_id = $1 AND created_at >= now() - interval '1 hour'", [userId]);
   if (Number(count.rows[0].count) >= 60) return { duplicate: false, allowed: false };
-  await client.query("INSERT INTO quick_request_log (user_id, client_id) VALUES ($1, NULLIF($2, ''))", [userId, clientId || ""]);
+  // Та сама пастка: обидва аргументи NULLIF без типу — параметр лишається
+  // невизначеним. Поруч, у рядках з датами, каст уже стоїть.
+  await client.query("INSERT INTO quick_request_log (user_id, client_id) VALUES ($1, NULLIF($2::text, ''))", [userId, clientId || ""]);
   return { duplicate: false, allowed: true };
 }
 

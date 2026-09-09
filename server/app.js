@@ -636,13 +636,14 @@ function createAppServer() {
       return await staticFile(res, url.pathname);
     } catch (error) {
       const mapped = mapDbError(error);
-      if (!isAppError(mapped)) console.error("Request error:", mapped && mapped.code, mapped && mapped.message);
-      return errorJson(
-        res,
-        mapped.status || 500,
-        mapped.code || "server_error",
-        mapped.message || "Server error"
-      );
+      // Свої помилки несуть текст для людини й ідуть як є. Чужі — ні: інакше
+      // клієнт отримує сирі повідомлення PostgreSQL, з яких видно структуру
+      // запитів. Деталь лишається в логах, користувач бачить нейтральне.
+      if (isAppError(mapped)) {
+        return errorJson(res, mapped.status || 500, mapped.code || "server_error", mapped.message || "Server error");
+      }
+      console.error("Request error:", url.pathname, mapped && mapped.code, mapped && mapped.message);
+      return errorJson(res, 500, "server_error", "Внутрішня помилка сервера. Спробуйте ще раз.");
     }
   });
 }
