@@ -3664,11 +3664,20 @@
 
   function quickErrorText(error) {
     var code = error && error.code;
+    var message = String((error && error.message) || "");
     if (code === "unauthorized") return "Токен не підійшов. Створіть новий і замініть його в команді.";
+    if (code === "chat_not_linked") return "Чат із ботом не привʼязаний. Відкрийте бота, натисніть «Почати», потім створіть токен ще раз.";
     if (code === "bot_unreachable") return "Бот не може вам написати. Відкрийте чат із ботом і натисніть «Почати».";
     if (code === "rate_limited") return "Забагато запитів. Спробуйте за хвилину.";
-    if (code === "http_404") return "Сервер не знає цього маршруту — оновіть застосунок і спробуйте ще раз.";
-    return (error && error.message) || "Не вдалося виконати запит.";
+    if (code === "not_granted") return "AI на сервері не налаштовано — розібрати текст нема кому.";
+    if (code === "http_404") return "Сервер не знає цього маршруту. Оновіть застосунок: закрийте Mini App і відкрийте знову.";
+    // Мережева відмова приходить як TypeError без коду: у Safari це «Load
+    // failed», у Chrome — «Failed to fetch». Показувати це користувачу
+    // безглуздо, тож пояснюємо, що саме перевіряти.
+    if (!code && /load failed|failed to fetch|networkerror/i.test(message)) {
+      return "Не вдалось достукатись до сервера. Перевірте зв'язок і що застосунок відкритий з робочого домену.";
+    }
+    return message || "Не вдалося виконати запит.";
   }
 
   // Перевірка йде тим самим шляхом, що й команда з iPhone: той самий URL,
@@ -3703,7 +3712,12 @@
     request("/api/quick/token", { method: "GET" }).then(function (data) {
       var tg = window.Telegram && window.Telegram.WebApp;
       var ios = !!(tg && tg.platform === "ios");
+      // Повна адреса потрібна лише команді на iPhone — вона стукає ззовні.
+      // Перевірка ж іде з цієї самої сторінки, тож бити треба у власний
+      // origin: відносний шлях не знає ні CORS, ні mixed content, а саме на
+      // них ламався запит, коли PUBLIC_URL заданий з http:// чи чужим доменом.
       var endpoint = String(data.publicUrl || window.location.origin).replace(/\/$/, "") + "/api/quick";
+      var probeEndpoint = "/api/quick";
       var hasToken = !!quickTokenForSession;
 
       // Токен показуємо повністю й у кілька рядків: у Telegram копіювання в
@@ -3792,7 +3806,7 @@
         probeButton.disabled = true;
         probeButton.textContent = "Перевіряю…";
         if (note) note.textContent = "";
-        quickProbe(endpoint, quickTokenForSession).then(function (result) {
+        quickProbe(probeEndpoint, quickTokenForSession).then(function (result) {
           probeButton.disabled = false;
           probeButton.textContent = "Перевірити ще раз";
           if (note) note.textContent = (result && result.reply) || "Готово.";
