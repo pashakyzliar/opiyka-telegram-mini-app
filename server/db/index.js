@@ -1,8 +1,14 @@
 "use strict";
 
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
 const config = require("../config");
 const { appError } = require("../lib/errors");
+
+// DATE (OID 1082) pg за замовчуванням розбирає як північ у часовому поясі
+// процесу. Репозиторій далі робить toISOString().slice(0, 10), тож на
+// сервері не в UTC (локально в Києві) кожна дата з'їжджала на день назад.
+// Північ UTC дає рівно ту дату, що лежить у БД, незалежно від TZ процесу.
+types.setTypeParser(1082, (value) => (value === null ? null : new Date(value + "T00:00:00Z")));
 
 let pool;
 

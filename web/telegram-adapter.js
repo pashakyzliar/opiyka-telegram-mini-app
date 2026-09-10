@@ -180,12 +180,14 @@
     function startPolling() {
       bindVisibility();
       if (timer || !hasListeners()) return;
-      if (document.visibilityState === "hidden") return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       timer = setInterval(function () { refresh().catch(function () {}); }, POLL_MS);
     }
 
     function bindVisibility() {
-      if (visibilityBound) return;
+      // Без document (тести у vm, неброузерне оточення) лишаємо звичайний
+      // інтервал: краще зайве опитування, ніж падіння на старті підписки.
+      if (visibilityBound || typeof document === "undefined") return;
       visibilityBound = true;
       document.addEventListener("visibilitychange", function () {
         if (document.visibilityState === "hidden") { stopTimer(); return; }

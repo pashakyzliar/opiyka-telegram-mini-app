@@ -165,7 +165,10 @@ function sumRows(rows) {
 // «Сьогодні» визначається за часовим поясом користувача, а не сервера:
 // інакше о 01:00 у Києві операція потрапляла б у вчорашній день UTC.
 function todayFor(offsetMinutes) {
-  const offset = Number.isFinite(Number(offsetMinutes)) ? Number(offsetMinutes) : 0;
+  const raw = Number(offsetMinutes);
+  // Зсув приходить від клієнта: поза ±14 год це не часовий пояс, а сміття,
+  // яке дає Invalid Date і RangeError замість відповіді.
+  const offset = Number.isFinite(raw) && Math.abs(raw) <= 14 * 60 ? raw : 0;
   const shifted = new Date(Date.now() + offset * 60000);
   return shifted.toISOString().slice(0, 10);
 }
@@ -326,8 +329,13 @@ function toolComparePeriods(account, ctx, args) {
   };
 }
 
+const SCREENS = TOOLS.find((tool) => tool.function.name === "open_screen").function.parameters.properties.screen.enum;
+
 function toolOpenScreen(account, ctx, args) {
-  return { screen: String(args.screen), opened: true };
+  // Схема — лише підказка моделі; значення все одно перевіряє сервер.
+  const screen = String(args.screen || "");
+  if (SCREENS.indexOf(screen) < 0) return { error: "Невідомий розділ.", opened: false };
+  return { screen: screen, opened: true };
 }
 
 const READ_TOOLS = {
