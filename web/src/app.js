@@ -3974,6 +3974,36 @@
     steps.forEach(function (fn) { fn(); });
     if (state.view === "overview" || state.view === "journal") refreshExpenseLabels();
     ensureBlockHelpButtons(document);
+    fitAmounts();
+    // Числа доїжджають анімацією, і найширшим рядок стає в кінці — тож
+    // підганяємо ще раз, коли лічильник зупинився.
+    clearTimeout(fitAgainTimer);
+    fitAgainTimer = setTimeout(fitAmounts, 700);
+  }
+
+  /* Довгі суми не мають вилазити за межі кишені. Стискати картку не можна —
+     розкладка задана макетом, тож стискається сам текст: від розміру,
+     заданого стилями, донизу з кроком в один піксель, але не менше ніж до
+     половини. Нижче цієї межі число вже не читається, і краще обрізати. */
+  var fitAgainTimer = null;
+  var FIT_SELECTOR = ".cell-value, .denomination, .week-split-sum, .cal-day-sum, .stat-line strong";
+
+  function fitAmounts(root) {
+    var nodes = (root || document).querySelectorAll(FIT_SELECTOR);
+    Array.prototype.forEach.call(nodes, function (el) {
+      if (!el.isConnected || !el.offsetParent) return;
+      // Спершу знімаємо власний розмір, щоб прочитати той, що дали стилі:
+      // він залежить від ширини екрана через clamp і міняється при повороті.
+      el.style.fontSize = "";
+      var base = parseFloat(getComputedStyle(el).fontSize) || 24;
+      var min = Math.max(15, Math.round(base * 0.5));
+      var size = Math.round(base);
+      var guard = 0;
+      while (size > min && el.scrollWidth > el.clientWidth + 1 && guard++ < 60) {
+        size -= 1;
+        el.style.fontSize = size + "px";
+      }
+    });
   }
 
   var renderQueued = false;
@@ -4345,6 +4375,11 @@
     setInterval(refreshCalendarDay, 60000);
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) refreshCalendarDay();
+    });
+    // Поворот екрана міняє clamp-розміри, тож підгонку треба повторити.
+    window.addEventListener("resize", function () {
+      clearTimeout(fitAgainTimer);
+      fitAgainTimer = setTimeout(fitAmounts, 150);
     });
     var form = document.getElementById("txForm");
     var dateInput = form.querySelector('input[name="date"]');

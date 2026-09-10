@@ -2042,13 +2042,18 @@ body.theme-blue .wallet-mini-mark { color: #fff; }
 .dashboard-date {
   grid-area: date;
   display: flex;
+  /* Базові стилі ставили колонку — без явного скидання дата лишалась
+     трьома рядками під шапкою. */
+  flex-direction: row;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 4px 10px;
   font-size: var(--text-small);
   color: var(--ink-soft);
 }
 .dashboard-date strong { font: 600 13px/1 var(--font-text); color: var(--ink-soft); }
 .dashboard-greeting { display: none; }
+.dashboard-date .sync-pill { margin: 0; }
 
 .view-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .view-title { font: 700 clamp(20px, 5.6vw, 24px)/1.1 var(--font-display); letter-spacing: -.02em; }
@@ -2072,6 +2077,20 @@ body.theme-blue .wallet-mini-mark { color: #fff; }
 #overview-month .cell-balance { grid-column: 1; min-height: 180px; }
 #overview-month .cell-hero { grid-column: 2; min-height: 180px; }
 #overview-month .cell-out { grid-column: 1 / -1; min-height: 0; }
+
+/* Без min-width:0 грид-комірка не стискається під вміст, і довге число
+   просто вилазить за межі картки. Разом з автопідбором розміру в JS це
+   і є те, чого бракувало. */
+.bento > .cell,
+.cell { min-width: 0; }
+.cell-value, .denomination, .week-split-sum, .cal-day-sum, .stat-line strong {
+  display: block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.stat-line strong { display: inline-block; vertical-align: baseline; }
+.cell-sub, .cell-meta, .cell-label { min-width: 0; overflow-wrap: anywhere; }
 
 .cell-rule {
   display: block;
