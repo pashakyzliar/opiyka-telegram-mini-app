@@ -106,21 +106,22 @@
 
     <div id="overview-month">
       <div class="bento" data-allowance="on">
-        <div class="cell cell-balance pocket pocket-primary" data-help-key="balance">
-          <span class="cell-label">Поточний баланс</span>
-          <span class="cell-value money" id="statBalance">0,00 ₴</span>
-          <div class="cell-sub" id="statBalanceSub"></div>
-          <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
-        </div>
-
-        <div class="cell cell-hero pocket pocket-soft" id="allowanceCard" data-help-key="allowance">
-          <span class="cell-label">На сьогодні залишок плану <span class="cell-sub2" id="allowanceBasis"></span></span>
+        <div class="cell cell-hero pocket pocket-primary" id="allowanceCard" data-help-key="allowance">
+          <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
           <span class="denomination money" id="allowanceValue">—</span>
           <div class="cell-meta">
             <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
             <span id="allowanceHint"></span>
           </div>
           <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
+          <button class="btn allowance-setup" type="button" id="allowanceSetup" data-goto="limits" hidden>Налаштувати тиждень</button>
+        </div>
+
+        <div class="cell cell-balance pocket pocket-soft" data-help-key="balance">
+          <span class="cell-label">Поточний баланс <span class="cell-sub2">усі ваші гроші</span></span>
+          <span class="cell-value money" id="statBalance">0,00 ₴</span>
+          <div class="cell-sub" id="statBalanceSub"></div>
+          <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
         </div>
 
         <div class="cell cell-out pocket pocket-accent" data-help-key="expenses">

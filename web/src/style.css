@@ -1943,6 +1943,54 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
   .head-btn, .avatar-btn { width: 40px; height: 40px; }
 }
 
+/* ---- Огляд: денний план як головний блок ---- */
+
+/* Герой на всю ширину, решта — парами. Баланс поруч і завжди помітний:
+   нульовий денний залишок не повинен читатись як «грошей немає». */
+#overview-month .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#overview-month .cell-hero { grid-column: 1 / -1; min-height: 172px; }
+#overview-month .cell-balance { grid-column: 1 / -1; min-height: 128px; }
+#overview-month .cell-out,
+#overview-month .cell-in { grid-column: span 1; }
+
+/* Блок типографіки вище фарбує .denomination у сливовий — на фіолетовій
+   кишені це 1.7:1 і нечитабельно. Тут перекриваємо явно. */
+.pocket-primary .denomination,
+.pocket-primary .denomination.money { color: #fff; }
+.pocket-soft .cell-value,
+.pocket-soft .cell-value.money,
+.pocket-accent .cell-value,
+.pocket-accent .cell-value.money { color: var(--roo-plum); }
+/* Мінусовий баланс лишається червоним, але темнішим — щоб пройти по
+   контрасту на світло-фіолетовому й на абрикосовому. */
+.pocket-soft .cell-value.negative,
+.pocket-accent .cell-value.negative { color: #8E1F18; }
+
+.cell-hero .denomination {
+  font-size: clamp(34px, 11vw, 52px);
+  line-height: 1;
+  letter-spacing: -.035em;
+}
+.cell-hero .cell-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: var(--text-small);
+}
+.pocket-primary .bar-track { background: rgba(255, 255, 255, .22); }
+.pocket-primary .bar-fill { background: #fff; }
+.pocket-primary .bar-fill.over,
+.cell-hero.over .bar-fill { background: var(--roo-apricot); }
+.cell-hero.over .denomination { color: var(--roo-apricot); }
+.allowance-setup {
+  align-self: flex-start;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, .16);
+  border-color: rgba(255, 255, 255, .34);
+  color: #fff;
+}
+.cell-balance .spark { margin-top: 8px; opacity: .8; }
+
 /* ---- Помічник Roo ---- */
 
 .roo-msg {

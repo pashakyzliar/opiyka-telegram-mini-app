@@ -1065,41 +1065,36 @@
     var a = allowance();
     var card = document.getElementById("allowanceCard");
     var bento = card ? card.closest(".bento") : null;
-    var show = state.view === "overview" && state.overviewMode === "month" && a.active && a.enabled;
+    // «Сьогодні можна» — головний блок екрана, тож він не зникає ніколи.
+    // Замість порожнього місця показуємо, чому числа немає, і куди піти.
+    var show = state.view === "overview" && state.overviewMode === "month";
     if (card) card.hidden = !show;
     if (bento) bento.dataset.allowance = show ? "on" : "off";
     if (!show) return;
+    var setup = document.getElementById("allowanceSetup");
     var el = document.getElementById("allowanceValue");
-    var visible = a.active && a.configured ? Math.max(0, a.weekAvailable) : 0;
+    var ready = a.active && a.enabled && a.configured;
+    if (setup) setup.hidden = ready;
+    document.getElementById("allowanceBar").parentNode.hidden = !ready;
+
+    if (!ready) {
+      el.textContent = "—";
+      prevStat.allowance = null;
+      card.classList.remove("over", "under");
+      var why = !a.active
+        ? { basis: "лише для поточного місяця", spent: "Ви дивитесь інший місяць", hint: "Денний план рахується тільки для поточного." }
+        : !a.enabled
+          ? { basis: "прогноз вимкнено", spent: "Денний план не рахується", hint: "Увімкніть «Сьогодні можна» в Кишенях." }
+          : { basis: "тиждень не заданий", spent: "Немає денних сум", hint: "Задайте тижневий бюджет і розкладіть його по днях." };
+      document.getElementById("allowanceBasis").textContent = why.basis;
+      document.getElementById("allowanceSpentToday").textContent = why.spent;
+      document.getElementById("allowanceHint").textContent = why.hint;
+      return;
+    }
+
+    var visible = Math.max(0, a.weekAvailable);
     animateValue(el, prevStat.allowance, visible, fmt, true);
     prevStat.allowance = visible;
-    if (!a.active) {
-      document.getElementById("allowanceBasis").textContent = "лише для поточного місяця";
-      document.getElementById("allowanceSpentToday").textContent = "Перемкнись на поточний місяць";
-      document.getElementById("allowanceHint").textContent = "архів не тягне денний прогноз";
-      document.getElementById("allowanceBar").style.width = "0%";
-      document.getElementById("allowanceBar").classList.remove("over");
-      card.classList.remove("over", "under");
-      return;
-    }
-    if (!a.enabled) {
-      document.getElementById("allowanceBasis").textContent = "прогноз вимкнено";
-      document.getElementById("allowanceSpentToday").textContent = "Увімкни функцію в налаштуваннях";
-      document.getElementById("allowanceHint").textContent = "після цього денний ліміт почне рахуватись";
-      document.getElementById("allowanceBar").style.width = "0%";
-      document.getElementById("allowanceBar").classList.remove("over");
-      card.classList.remove("over", "under");
-      return;
-    }
-    if (!a.configured) {
-      document.getElementById("allowanceBasis").textContent = "налаштуй тиждень";
-      document.getElementById("allowanceSpentToday").textContent = "Прогноз поки не задано";
-      document.getElementById("allowanceHint").textContent = "додай денні суми та резерв у налаштуваннях";
-      document.getElementById("allowanceBar").style.width = "0%";
-      document.getElementById("allowanceBar").classList.remove("over");
-      card.classList.remove("over", "under");
-      return;
-    }
     document.getElementById("allowanceBasis").textContent =
       "тижневий залишок";
     document.getElementById("allowanceSpentToday").textContent = "Сьогодні витрачено " + fmtShort(a.spentToday);
