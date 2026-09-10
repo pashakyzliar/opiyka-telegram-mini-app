@@ -77,7 +77,8 @@
     </div>
     <div class="dashboard-actions">
       <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
-      <button class="head-btn" type="button" id="toggleAmounts" aria-pressed="false" aria-label="Приховати суми">👁</button>
+      <button class="head-btn" type="button" id="toggleAmounts" aria-pressed="false" aria-label="Приховати суми" title="Приховати суми">👁</button>
+      <button class="head-btn" type="button" id="toggleTheme" aria-pressed="false" aria-label="Синій інтерфейс" title="Синій інтерфейс">🌙</button>
       <button class="avatar-btn" type="button" id="cabinetOpen" aria-label="Кабінет">
         <span id="cabinetAvatarMini">К</span>
       </button>
@@ -469,14 +470,22 @@
 
 <nav class="viewtabs roo-dock" role="tablist" aria-label="Основна навігація">
   <button class="viewtab active" data-view="overview" role="tab" aria-controls="view-overview" aria-selected="true">
-    <span class="viewtab-ico" aria-hidden="true">◐</span><span>Огляд</span>
+    <span class="viewtab-ico" aria-hidden="true">📊</span><span>Огляд</span>
   </button>
   <button class="viewtab" data-view="pockets" role="tab" aria-controls="view-pockets" aria-selected="false">
-    <span class="viewtab-ico" aria-hidden="true">▣</span><span>Кишені</span>
+    <span class="viewtab-ico" aria-hidden="true">👛</span><span>Кишені</span>
   </button>
   <button class="viewtab" data-view="roo" role="tab" aria-controls="view-roo" aria-selected="false">
-    <span class="viewtab-ico" aria-hidden="true"><img src="./assets/roo.svg" alt="" width="20" height="20" onerror="this.replaceWith(document.createTextNode('✦'))"></span><span>Помічник Roo</span>
+    <span class="viewtab-ico" aria-hidden="true">🦘</span><span>Помічник Roo</span>
   </button>
 </nav>
 
 <div class="expense-icon-picker" id="expenseIconPicker" role="dialog" aria-label="Емодзі для витрат" hidden></div>
+
+<aside class="block-help-popover" id="blockHelpPopover" role="dialog" aria-labelledby="blockHelpTitle" hidden>
+  <div class="block-help-head">
+    <strong id="blockHelpTitle"></strong>
+    <button class="block-help-close" type="button" id="blockHelpClose" aria-label="Закрити">✕</button>
+  </div>
+  <div class="block-help-body" id="blockHelpBody"></div>
+</aside>

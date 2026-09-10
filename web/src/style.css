@@ -1830,7 +1830,15 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
 .cal-cell[data-today="1"] { border-color: var(--roo-purple-soft); }
 .cal-cell[aria-current="date"] { background: var(--roo-purple); color: #fff; }
 .cal-cell:focus-visible { outline: 2px solid var(--roo-purple); outline-offset: 2px; }
-.cal-marks { display: flex; gap: 3px; min-height: 6px; }
+.cal-marks { display: flex; align-items: center; gap: 3px; min-height: 14px; }
+/* Вирок дня формою, а не лише кольором: галочка проти хрестика читається
+   й у відтінках сірого. */
+.cal-verdict { font-style: normal; font-size: 12px; line-height: 1; font-weight: 700; }
+.cal-ok { color: var(--roo-positive); }
+.cal-over { color: var(--roo-negative); }
+.cal-cell[aria-current="date"] .cal-ok,
+.cal-cell[aria-current="date"] .cal-over { color: #fff; }
+.cal-cell[data-verdict="over"] { border-color: color-mix(in srgb, var(--roo-negative) 45%, transparent); }
 .cal-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
 .cal-dot-out { background: var(--roo-negative); }
 .cal-dot-in { background: var(--roo-positive); }
@@ -1942,6 +1950,57 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
   .dashboard-actions { gap: 6px; }
   .head-btn, .avatar-btn { width: 40px; height: 40px; }
 }
+
+/* ===================================================================
+   Синій інтерфейс. Перевизначає ті самі токени — жодного дублювання
+   компонентних правил, тому нові блоки автоматично отримують і цю тему.
+   =================================================================== */
+body.theme-blue {
+  color-scheme: dark;
+  --roo-lavender: #071323;
+  --roo-lavender-2: #0A192C;
+  --roo-surface: #0D2038;
+  --roo-surface-2: #102946;
+  --roo-purple: #3F72D8;
+  --roo-purple-hi: #7DAAFF;
+  --roo-purple-lo: #2B55A8;
+  --roo-purple-soft: #172F4E;
+  --roo-apricot: #E8A76A;
+  --roo-apricot-deep: #C9884A;
+  --roo-plum: #F4F8FF;
+  --roo-plum-soft: #AFC2DE;
+  --roo-divider: #24354F;
+  --roo-negative: #FF8E86;
+  --roo-positive: #6FD6A6;
+  --roo-warning: #F2CE7A;
+  --ink-muted: #8094AF;
+  --hair: rgba(174, 207, 255, .14);
+  --shadow: 0 14px 34px rgba(0, 5, 18, .5);
+  --shadow-soft: 0 6px 18px rgba(0, 5, 18, .38);
+}
+body.theme-blue .bg-vignette {
+  background:
+    radial-gradient(110% 60% at 50% -8%, rgba(55, 112, 214, .28), transparent 62%),
+    radial-gradient(80% 46% at 100% 14%, rgba(26, 104, 165, .16), transparent 66%),
+    var(--roo-lavender);
+}
+/* На темному фоні світло-синя кишеня вже не «світла»: текст на ній має
+   бути світлим, інакше він зникає. */
+body.theme-blue .pocket-soft { color: var(--roo-plum); }
+body.theme-blue .pocket-soft .cell-label,
+body.theme-blue .pocket-soft .cell-sub,
+body.theme-blue .pocket-soft .cell-value,
+body.theme-blue .pocket-soft .cell-value.money { color: var(--roo-plum); }
+body.theme-blue .pocket-accent,
+body.theme-blue .pocket-accent .cell-label,
+body.theme-blue .pocket-accent .cell-sub,
+body.theme-blue .pocket-accent .cell-value,
+body.theme-blue .pocket-accent .cell-value.money { color: #14243A; }
+body.theme-blue .pocket-soft .cell-value.negative,
+body.theme-blue .pocket-accent .cell-value.negative { color: #7A1712; }
+body.theme-blue .avatar-btn { background: var(--roo-purple); color: #fff; }
+body.theme-blue .roo-dock-mark img,
+body.theme-blue .wallet-mini-mark { color: #fff; }
 
 /* ---- Огляд: денний план як головний блок ---- */
 

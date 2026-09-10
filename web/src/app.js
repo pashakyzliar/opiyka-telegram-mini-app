@@ -40,6 +40,21 @@
         "Невитрачений залишок переходить на наступний день. Витрати з позначкою «З резерву» сюди не віднімаються — вони зменшують окремий тижневий резерв. Від’ємний результат на картці показується як нуль."
       ]
     },
+    calendar: {
+      title: "Календар",
+      body: [
+        "Зелена галочка — того дня ви вклались у денний план, червоний хрестик — вийшли за нього. Дні без плану або майбутні позначок не мають.",
+        "Порожнє кільце означає заплановану подію: день зарплати або регулярний платіж. Це прогноз, а не факт — доки операції немає, у сумах вона не враховується.",
+        "Оберіть день, щоб побачити його підсумок: скільки записано, скільки надійшло і який був план."
+      ]
+    },
+    "reserve-pocket": {
+      title: "Резерв тижня",
+      body: [
+        "Це запланована частина тижневого бюджету, а не окремий рахунок і не переказ. Гроші нікуди не переміщуються.",
+        "З резерву списуються лише операції з позначкою «З резерву». Звичайні витрати зменшують денний план, а не його."
+      ]
+    },
     balance: {
       title: "Баланс",
       body: [
@@ -1724,11 +1739,28 @@
     }).join("") + days.map(function (iso) {
       if (!iso) return '<span class="cal-cell cal-empty"></span>';
       var day = fact[iso];
+      var spent = day ? day.expense : 0;
+      var plan = plannedForDay(iso);
       var marks = "";
-      if (day && day.expense) marks += '<i class="cal-dot cal-dot-out"></i>';
+      var verdict = "";
+      // Галочка чи хрестик мають сенс лише там, де є з чим порівнювати:
+      // день у минулому або сьогодні, і на нього заданий денний план.
+      // Майбутні дні та дні без плану лишаються без вироку.
+      if (plan > 0 && iso <= today) {
+        var ok = spent <= plan;
+        verdict = ok ? "ok" : "over";
+        marks += '<i class="cal-verdict cal-' + verdict + '" aria-hidden="true">' + (ok ? "✓" : "✕") + '</i>';
+      } else if (spent > 0) {
+        marks += '<i class="cal-dot cal-dot-out"></i>';
+      }
       if (day && day.income) marks += '<i class="cal-dot cal-dot-in"></i>';
       if (planned[iso]) marks += '<i class="cal-dot cal-dot-plan"></i>';
+      var title = plan > 0 && iso <= today
+        ? (spent <= plan ? "вклались у план дня" : "перевищено план дня")
+        : "";
       return '<button type="button" class="cal-cell" data-cal-day="' + esc(iso) + '"' +
+        (verdict ? ' data-verdict="' + verdict + '"' : '') +
+        (title ? ' title="' + esc(title) + '"' : '') +
         (iso === state.calendarDate ? ' aria-current="date"' : '') +
         (iso === today ? ' data-today="1"' : '') + '>' +
         '<span class="cal-num">' + Number(iso.slice(8, 10)) + '</span>' +
@@ -1754,7 +1786,10 @@
       '<span class="cal-day-sum money">' + esc(fmt(spent)) + '</span></div>');
     var meta = ["записів: " + rows.length];
     if (got) meta.push("надійшло " + fmtShort(got));
-    if (plan) meta.push("план дня " + fmtShort(plan));
+    if (plan) {
+      meta.push("план дня " + fmtShort(plan));
+      if (selected <= today) meta.push(spent <= plan ? "вклались ✓" : "перевищено ✕");
+    }
     if (planned[selected]) meta.push("є заплановані події");
     parts.push('<div class="cal-day-meta">' + esc(meta.join(" · ")) + '</div>');
     if (rows.length) {
@@ -4547,18 +4582,49 @@
     // Приховування сум: клас на body, самі значення лишаються в DOM для
     // читалок екрана, візуально розмиваються токеном.
     var toggleAmounts = document.getElementById("toggleAmounts");
-    if (toggleAmounts) toggleAmounts.addEventListener("click", function () {
-      var on = document.body.classList.toggle("amounts-hidden");
+    function paintAmountsToggle(on) {
+      if (!toggleAmounts) return;
+      // Стан читається і без кольору: сама піктограма інша.
+      toggleAmounts.textContent = on ? "🙈" : "👁";
       toggleAmounts.setAttribute("aria-pressed", on ? "true" : "false");
       toggleAmounts.setAttribute("aria-label", on ? "Показати суми" : "Приховати суми");
+      toggleAmounts.title = on ? "Показати суми" : "Приховати суми";
+    }
+    if (toggleAmounts) toggleAmounts.addEventListener("click", function () {
+      var on = document.body.classList.toggle("amounts-hidden");
+      paintAmountsToggle(on);
       try { localStorage.setItem("walroo_amounts_hidden", on ? "1" : "0"); } catch (e) {}
     });
     try {
-      if (localStorage.getItem("walroo_amounts_hidden") === "1") {
-        document.body.classList.add("amounts-hidden");
-        if (toggleAmounts) toggleAmounts.setAttribute("aria-pressed", "true");
-      }
-    } catch (e) {}
+      var hidden = localStorage.getItem("walroo_amounts_hidden") === "1";
+      document.body.classList.toggle("amounts-hidden", hidden);
+      paintAmountsToggle(hidden);
+    } catch (e) { paintAmountsToggle(false); }
+
+    // Синій інтерфейс — це другий набір значень тих самих токенів, а не
+    // окрема тема з власними правилами. Тому перемикається одним класом.
+    var toggleTheme = document.getElementById("toggleTheme");
+    function paintThemeToggle(on) {
+      if (!toggleTheme) return;
+      toggleTheme.textContent = on ? "☀️" : "🌙";
+      toggleTheme.setAttribute("aria-pressed", on ? "true" : "false");
+      toggleTheme.setAttribute("aria-label", on ? "Світлий інтерфейс" : "Синій інтерфейс");
+      toggleTheme.title = on ? "Світлий інтерфейс" : "Синій інтерфейс";
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", on ? "#071323" : "#F0EBFF");
+    }
+    if (toggleTheme) toggleTheme.addEventListener("click", function () {
+      var on = document.body.classList.toggle("theme-blue");
+      paintThemeToggle(on);
+      dropCssCache();
+      try { localStorage.setItem("walroo_theme_blue", on ? "1" : "0"); } catch (e) {}
+      renderAll();
+    });
+    try {
+      var blue = localStorage.getItem("walroo_theme_blue") === "1";
+      document.body.classList.toggle("theme-blue", blue);
+      paintThemeToggle(blue);
+    } catch (e) { paintThemeToggle(false); }
 
     // Зручності зберігаємо локально, а не в акаунті: це властивість пристрою,
     // а не фінансових даних, і на планшеті людина може хотіти інакше.
