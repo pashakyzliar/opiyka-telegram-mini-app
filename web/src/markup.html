@@ -75,16 +75,21 @@
       </span>
       <span class="brand-word">walroo</span>
     </div>
+    <div class="dashboard-actions">
+      <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
+      <button class="head-btn" type="button" id="toggleAmounts" aria-pressed="false" aria-label="Приховати суми">👁</button>
+      <button class="avatar-btn" type="button" id="cabinetOpen" aria-label="Кабінет">
+        <span id="cabinetAvatarMini">К</span>
+      </button>
+    </div>
     <div class="dashboard-date" aria-live="polite">
       <span class="dashboard-weekday" id="dashboardWeekday"></span>
       <strong id="dashboardToday"></strong>
       <span class="dashboard-greeting" id="dashboardGreeting"></span>
     </div>
-    <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
   </header>
 
   <div class="month-switcher" id="monthSwitcher" aria-label="Перегляд місяця">
-    <span class="month-switcher-label">Меню</span>
     <div class="month-nav">
       <button class="icon-btn" type="button" id="prevMonth" aria-label="Попередній місяць">‹</button>
       <span class="month-label" id="monthLabel"></span>
@@ -92,14 +97,100 @@
     </div>
   </div>
 
-  <section class="view" id="view-main">
+  <!-- ============================ ОГЛЯД ============================ -->
+  <section class="view" id="view-overview">
+    <div class="seg" role="tablist" aria-label="Період огляду">
+      <button class="seg-btn active" type="button" data-overview-mode="month" role="tab" aria-selected="true">Місяць</button>
+      <button class="seg-btn" type="button" data-overview-mode="year" role="tab" aria-selected="false">Рік</button>
+    </div>
 
+    <div id="overview-month">
+      <div class="bento" data-allowance="on">
+        <div class="cell cell-balance pocket pocket-primary" data-help-key="balance">
+          <span class="cell-label">Поточний баланс</span>
+          <span class="cell-value money" id="statBalance">0,00 ₴</span>
+          <div class="cell-sub" id="statBalanceSub"></div>
+          <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
+        </div>
+
+        <div class="cell cell-hero pocket pocket-soft" id="allowanceCard" data-help-key="allowance">
+          <span class="cell-label">На сьогодні залишок плану <span class="cell-sub2" id="allowanceBasis"></span></span>
+          <span class="denomination money" id="allowanceValue">—</span>
+          <div class="cell-meta">
+            <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
+            <span id="allowanceHint"></span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
+        </div>
+
+        <div class="cell cell-out pocket pocket-accent" data-help-key="expenses">
+          <span class="cell-label">Витрати місяця</span>
+          <span class="cell-value money" id="statExpense">0,00 ₴</span>
+          <div class="cell-sub" id="statExpenseSub"></div>
+        </div>
+
+        <div class="cell cell-in" data-help-key="income-fact">
+          <span class="cell-label">Отримано <span class="cell-sub2">фактичні надходження</span></span>
+          <span class="cell-value positive money" id="statIncomeFact">0,00 ₴</span>
+          <div class="cell-sub" id="statIncomeFactSub"></div>
+        </div>
+
+        <div class="cell cell-in" data-help-key="income-plan">
+          <span class="cell-label">План доходу <span class="cell-sub2">на місяць</span></span>
+          <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
+          <div class="cell-sub" id="statIncomeSub"></div>
+        </div>
+      </div>
+
+      <section class="panel panel-calendar" id="calendarPanel" data-help-key="calendar">
+        <div class="panel-head">
+          <h2>Календар</h2>
+          <div class="seg seg-sm" role="tablist" aria-label="Вигляд календаря">
+            <button class="seg-btn active" type="button" data-calendar-mode="week" role="tab" aria-selected="true">Тиждень</button>
+            <button class="seg-btn" type="button" data-calendar-mode="month" role="tab" aria-selected="false">Місяць</button>
+          </div>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="calendar-day" id="calendarDay"></div>
+      </section>
+
+      <div class="overview-actions">
+        <button class="btn-primary btn-add" type="button" id="openAddRecord">+ Додати запис</button>
+        <button class="btn btn-icon-lg" type="button" id="openJournalQuick" aria-label="Журнал">🧾</button>
+      </div>
+      <div class="overview-links">
+        <button class="linkish" type="button" data-goto="journal">Журнал</button>
+        <button class="linkish" type="button" data-goto="analytics">Аналітика →</button>
+      </div>
+    </div>
+
+    <div id="overview-year" hidden>
+      <div class="ledger-head">
+        <h2>Рік</h2>
+        <div class="month-nav">
+          <button class="icon-btn" type="button" id="prevYear" aria-label="Попередній рік">‹</button>
+          <span class="month-label" id="yearLabel"></span>
+          <button class="icon-btn" type="button" id="nextYear" aria-label="Наступний рік">›</button>
+        </div>
+      </div>
+      <div class="bento bento-year" id="yearTotals"></div>
+      <section class="panel panel-wave" data-help-key="six-month-trend">
+        <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
+        <div id="trendWrap"></div>
+      </section>
+      <section class="panel" data-help-key="year-table"><div id="yearTable"></div></section>
+    </div>
+  </section>
+
+  <!-- ============================ ЖУРНАЛ ============================ -->
+  <section class="view" id="view-journal" hidden>
     <section class="panel panel-ledger panel-ledger-priority" data-help-key="ledger">
       <div class="ledger-head">
         <div class="ledger-title">
           <h2>Журнал</h2>
           <span class="panel-note" id="ledgerSummary">останні операції за місяць</span>
         </div>
+        <button class="btn" type="button" data-goto="overview">‹ Огляд</button>
       </div>
 
       <div class="presets" id="presetRow"></div>
@@ -108,12 +199,9 @@
         <div class="type-toggle" role="group" aria-label="Тип операції">
           <button type="button" data-type="expense" class="active">Витрата</button>
           <button type="button" data-type="income">Дохід</button>
-          
         </div>
         <input type="date" name="date" required aria-label="Дата" />
         <select name="category" id="txCategory" required aria-label="Стаття"></select>
-        
-        
         <input type="text" name="amount" inputmode="decimal" autocomplete="off" placeholder="Сума, ₴" required aria-label="Сума" />
         <input type="text" name="note" placeholder="Нотатка" maxlength="120" aria-label="Нотатка" />
         <label class="mini-check" id="reserveToggle"><input type="checkbox" name="reserve" />З резерву</label>
@@ -141,13 +229,13 @@
       <div class="search-bar">
         <button class="search-toggle btn" type="button" id="searchToggle" aria-expanded="false" aria-controls="searchFilters">⌄ Пошук</button>
         <div class="search-filters" id="searchFilters" hidden>
-        <input type="search" id="searchText" placeholder="Пошук по нотатці…" aria-label="Пошук" />
-        <select id="searchCat" aria-label="Стаття"><option value="">Усі статті</option></select>
-        <input type="text" id="searchMin" inputmode="decimal" placeholder="від, ₴" aria-label="Сума від" />
-        <input type="text" id="searchMax" inputmode="decimal" placeholder="до, ₴" aria-label="Сума до" />
-        <input type="date" id="searchFrom" aria-label="Дата від" />
-        <input type="date" id="searchTo" aria-label="Дата до" />
-        <button class="btn" type="button" id="searchReset">Скинути фільтр</button>
+          <input type="search" id="searchText" placeholder="Пошук по нотатці…" aria-label="Пошук" />
+          <select id="searchCat" aria-label="Стаття"><option value="">Усі статті</option></select>
+          <input type="text" id="searchMin" inputmode="decimal" placeholder="від, ₴" aria-label="Сума від" />
+          <input type="text" id="searchMax" inputmode="decimal" placeholder="до, ₴" aria-label="Сума до" />
+          <input type="date" id="searchFrom" aria-label="Дата від" />
+          <input type="date" id="searchTo" aria-label="Дата до" />
+          <button class="btn" type="button" id="searchReset">Скинути фільтр</button>
         </div>
       </div>
       <div class="filter-note" id="filterNote" hidden></div>
@@ -162,133 +250,54 @@
       </div>
       <div class="empty-note" id="txEmpty" hidden>Ще немає операцій. Додайте першу.</div>
     </section>
-
-    <div class="bento" data-allowance="on">
-      <div class="cell cell-hero" id="allowanceCard" data-help-key="allowance">
-        <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
-        <span class="denomination money" id="allowanceValue">—</span>
-        <div class="cell-meta">
-          <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
-          <span id="allowanceHint"></span>
-        </div>
-        <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
-      </div>
-
-      <div class="cell cell-balance" data-help-key="balance">
-        <span class="cell-label">Баланс <span class="cell-sub2">загальний</span></span>
-        <span class="cell-value money" id="statBalance">0,00 ₴</span>
-        <div class="cell-sub" id="statBalanceSub"></div>
-        <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
-      </div>
-
-      <div class="cell cell-in" data-help-key="income-plan">
-        <span class="cell-label">План доходу <span class="cell-sub2">на місяць</span></span>
-        <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
-        <div class="cell-sub" id="statIncomeSub"></div>
-      </div>
-
-      <div class="cell cell-in" data-help-key="income-fact">
-        <span class="cell-label">Отримано <span class="cell-sub2">усі надходження</span></span>
-        <span class="cell-value positive money" id="statIncomeFact">0,00 ₴</span>
-        <div class="cell-sub" id="statIncomeFactSub"></div>
-      </div>
-
-      <div class="cell cell-out" data-help-key="expenses">
-        <span class="cell-label">Витрати <span class="cell-sub2">за місяць</span></span>
-        <span class="cell-value negative money" id="statExpense">0,00 ₴</span>
-        <div class="cell-sub" id="statExpenseSub"></div>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <section class="panel panel-week-hero" id="weekForecastPanel" data-help-key="week-forecast" hidden>
-        <div class="panel-head"><h2>Тиждень</h2><span class="panel-note" id="weekForecastMeta"></span></div>
-        <div class="week-board" id="weekForecastGrid"></div>
-      </section>
-
-      <section class="panel panel-budget-sculpt" data-help-key="budgets">
-        <div class="panel-head"><h2>Ліміти</h2><span class="panel-note">по статтях</span></div>
-        <div id="budgetList"></div>
-      </section>
-
-      <section class="panel panel-orbit" data-help-key="expense-breakdown">
-        <div class="panel-head"><h2>Розклад витрат</h2><span class="panel-note" id="donutNote"></span></div>
-        <div id="donutWrap"></div>
-      </section>
-
-    </div>
   </section>
 
-  <section class="view" id="view-year" hidden>
+  <!-- ========================== АНАЛІТИКА ========================== -->
+  <section class="view" id="view-analytics" hidden>
     <div class="ledger-head">
-      <h2>Рік</h2>
-      <div class="month-nav">
-        <button class="icon-btn" type="button" id="prevYear" aria-label="Попередній рік">‹</button>
-        <span class="month-label" id="yearLabel"></span>
-        <button class="icon-btn" type="button" id="nextYear" aria-label="Наступний рік">›</button>
+      <h2>Аналітика</h2>
+      <button class="btn" type="button" data-goto="overview">‹ Огляд</button>
+    </div>
+
+    <section class="panel panel-orbit" data-help-key="expense-breakdown">
+      <div class="panel-head"><h2>Розклад витрат</h2><span class="panel-note" id="donutNote"></span></div>
+      <div id="donutWrap"></div>
+      <button class="btn" type="button" data-goto="limits">Перейти до лімітів →</button>
+    </section>
+
+    <section class="panel panel-week-hero" id="weekForecastPanel" data-help-key="week-forecast" hidden>
+      <div class="panel-head"><h2>Тиждень</h2><span class="panel-note" id="weekForecastMeta"></span></div>
+      <div class="week-board" id="weekForecastGrid"></div>
+    </section>
+  </section>
+
+  <!-- ============================ КИШЕНІ ============================ -->
+  <section class="view" id="view-pockets" hidden>
+    <div class="bento bento-pockets">
+      <div class="cell pocket pocket-soft" data-help-key="reserve-pocket">
+        <span class="cell-label">Резерв тижня <span class="cell-sub2">запланований</span></span>
+        <span class="cell-value money" id="pocketReserve">0,00 ₴</span>
+        <div class="cell-sub" id="pocketReserveSub"></div>
+      </div>
+      <div class="cell pocket pocket-primary" data-help-key="navar-history">
+        <span class="cell-label">Заощадження <span class="cell-sub2">фактично відкладено</span></span>
+        <span class="cell-value money" id="pocketSavings">0,00 ₴</span>
+        <div class="cell-sub" id="pocketSavingsSub"></div>
       </div>
     </div>
-    <div class="bento bento-year" id="yearTotals"></div>
-    <section class="panel panel-wave" data-help-key="six-month-trend">
-      <div class="panel-head"><h2>Динаміка · 6 міс.</h2><span class="panel-note" id="trendLegend"></span></div>
-      <div id="trendWrap"></div>
-    </section>
-    <section class="panel" data-help-key="year-table"><div id="yearTable"></div></section>
-  </section>
 
-  <section class="view" id="view-plan" hidden>
-    <div class="grid-2">
-      <section class="panel" id="settings-monthly-plan" data-help-key="recurring">
-        <div class="panel-head"><h2>Регулярні</h2><button class="btn" type="button" id="addRecBtn">+ платіж</button></div>
-        <form id="recForm" class="stack-form" hidden>
-          <input type="text" name="name" placeholder="Назва" maxlength="60" required />
-          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
-          <select name="category" id="recCategory" aria-label="Стаття"></select>
-          <select name="wallet" id="recWallet" aria-label="Гаманець"></select>
-          <input type="number" name="day" min="1" max="31" placeholder="День місяця" required />
-          <button class="btn-primary" type="submit">Додати</button>
-        </form>
-        <div id="recList"></div>
-      </section>
-
-      <section class="panel" id="plan-amortize" data-help-key="amortization">
-        <div class="panel-head"><h2>Амортизація</h2><button class="btn" type="button" id="addAmBtn">+ витрата</button></div>
-        <p class="panel-note">Рідкі великі витрати, розкидані по місяцях.</p>
-        <form id="amForm" class="stack-form" hidden>
-          <input type="text" name="name" placeholder="Напр. страховка" maxlength="60" required />
-          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
-          <input type="number" name="months" min="1" max="120" placeholder="Раз на N місяців" required />
-          <button class="btn-primary" type="submit">Додати</button>
-        </form>
-        <div id="amList"></div>
-      </section>
-
-      <section class="panel" id="plan-debts" data-help-key="debts">
-        <div class="panel-head"><h2>Борги</h2><button class="btn" type="button" id="addDebtBtn">+ борг</button></div>
-        <p class="panel-note">Окремо від витрат — у статистику не йдуть.</p>
-        <form id="debtForm" class="stack-form" hidden>
-          <select name="direction" aria-label="Напрям">
-            <option value="lent">Позичив я</option>
-            <option value="borrowed">Позичили мені</option>
-          </select>
-          <input type="text" name="person" placeholder="Кому / хто" maxlength="60" required />
-          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
-          <input type="date" name="due" aria-label="Повернути до" />
-          <button class="btn-primary" type="submit">Додати</button>
-        </form>
-        <div id="debtList"></div>
-      </section>
-
+    <div class="seg seg-3" role="tablist" aria-label="Розділи кишень">
+      <button class="seg-btn active" type="button" data-pocket-tab="plan" role="tab" aria-selected="true">Мій план</button>
+      <button class="seg-btn" type="button" data-pocket-tab="payments" role="tab" aria-selected="false">Платежі</button>
+      <button class="seg-btn" type="button" data-pocket-tab="debts" role="tab" aria-selected="false">Борги</button>
     </div>
-  </section>
 
-  <section class="view" id="view-settings" hidden>
-    <div class="grid-2">
+    <div id="pockets-plan">
       <section class="panel" id="settings-navar" data-help-key="salary-plan">
-        <div class="panel-head"><h2>Місячний план</h2><span class="panel-note">ЗП і дні надходження</span></div>
+        <div class="panel-head"><h2>Місячний план</h2><span class="panel-note">дохід і дні надходження</span></div>
         <label class="setting-row"><span>Місячний план</span>
           <input type="checkbox" id="salaryPlanEnabled" /></label>
-        <label class="setting-row"><span>ЗП за місяць</span>
+        <label class="setting-row"><span>Дохід за місяць</span>
           <input type="text" id="salaryAmount" inputmode="decimal" placeholder="70000" /></label>
         <div class="setting-row salary-days-head"><span>Дні надходження</span><button class="btn" type="button" id="addSalaryDay">+ дата</button></div>
         <div id="salaryDaysList" class="stack-form"></div>
@@ -296,7 +305,7 @@
       </section>
 
       <section class="panel" id="settings-limits" data-help-key="week-settings">
-        <div class="panel-head"><h2>Тиждень</h2><span class="panel-note">План, резерв і денні ліміти</span></div>
+        <div class="panel-head"><h2>Тиждень</h2><span class="panel-note">план, резерв і денні ліміти</span></div>
         <label class="setting-row"><span>Сьогодні можна</span>
           <input type="checkbox" id="allowanceEnabled" /></label>
         <label class="setting-row"><span>Всього на тиждень</span>
@@ -315,44 +324,85 @@
         <div class="setting-note" id="weekPlanStatus"></div>
       </section>
 
-      <section class="panel" id="settings-categories" data-help-key="categories">
-        <div class="panel-head"><h2>Кастомізація витрат</h2><span class="panel-note">створюй секції та кольори</span></div>
-        <form id="expenseCategoryForm" class="stack-form expense-cat-form">
-          <input type="text" name="name" placeholder="Нова категорія" maxlength="28" required />
-          <button type="button" class="expense-cat-icon-button is-empty" data-expense-icon-trigger data-icon-input-id="newExpenseCategoryIcon" data-icon-value="" aria-label="Обрати емодзі категорії" aria-haspopup="dialog" aria-expanded="false" aria-controls="expenseIconPicker">🙂</button>
-          <input type="hidden" name="icon" id="newExpenseCategoryIcon" value="" />
-          <input type="color" name="color" value="#5aa8ba" aria-label="Колір категорії" />
+      <section class="panel panel-budget-sculpt" id="pockets-limits" data-help-key="budgets">
+        <div class="panel-head"><h2>Ліміти</h2><span class="panel-note">по статтях</span></div>
+        <div id="budgetList"></div>
+      </section>
+    </div>
+
+    <div id="pockets-payments" hidden>
+      <section class="panel" id="plan-recurring" data-help-key="recurring">
+        <div class="panel-head"><h2>Регулярні</h2><button class="btn" type="button" id="addRecBtn">+ платіж</button></div>
+        <form id="recForm" class="stack-form" hidden>
+          <input type="text" name="name" placeholder="Назва" maxlength="60" required />
+          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
+          <select name="category" id="recCategory" aria-label="Стаття"></select>
+          <select name="wallet" id="recWallet" aria-label="Гаманець"></select>
+          <input type="number" name="day" min="1" max="31" placeholder="День місяця" required />
           <button class="btn-primary" type="submit">Додати</button>
         </form>
-        <div id="expenseCategoryList"></div>
-        <div class="setting-note" id="expenseCategoryNote"></div>
+        <div id="recList"></div>
       </section>
 
-      <section class="panel" id="settings-navar-history" data-help-key="navar-history">
-        <div class="panel-head"><h2>Заощадження</h2><span class="panel-note">Переноси по місяцях</span></div>
-        <div class="records" id="navarList"></div>
+      <section class="panel" id="plan-amortize" data-help-key="amortization">
+        <div class="panel-head"><h2>Великі витрати</h2><button class="btn" type="button" id="addAmBtn">+ витрата</button></div>
+        <p class="panel-note">Рідкі великі суми — страховка, шини, техогляд. Застосунок ділить їх на місяці, щоб вони не били по одному місяцю.</p>
+        <form id="amForm" class="stack-form" hidden>
+          <input type="text" name="name" placeholder="Напр. страховка" maxlength="60" required />
+          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
+          <input type="number" name="months" min="1" max="120" placeholder="Раз на N місяців" required />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="amList"></div>
       </section>
+    </div>
 
-      <section class="panel" id="settings-security" data-help-key="service">
-        <div class="panel-head"><h2>Сервіс</h2></div>
-        <label class="setting-row"><span>Спокійний режим</span>
-          <input type="checkbox" id="calmMode" /></label>
-        <label class="setting-row"><span>PIN на вхід</span>
-          <input type="text" id="pinSet" inputmode="numeric" maxlength="12" placeholder="порожньо = вимкнено" /></label>
-        <div class="setting-actions">
-          <button class="btn" type="button" id="btnCsv">Експорт у CSV</button>
-          <button class="btn" type="button" id="btnDeleteAccount">Видалити акаунт</button>
-        </div>
-        <div class="records" id="recordsBox"></div>
+    <div id="pockets-debts" hidden>
+      <section class="panel" id="plan-debts" data-help-key="debts">
+        <div class="panel-head"><h2>Борги</h2><button class="btn" type="button" id="addDebtBtn">+ борг</button></div>
+        <p class="panel-note">Окремо від витрат — у статистику не йдуть.</p>
+        <form id="debtForm" class="stack-form" hidden>
+          <select name="direction" aria-label="Напрям">
+            <option value="lent">Позичив я</option>
+            <option value="borrowed">Позичили мені</option>
+          </select>
+          <input type="text" name="person" placeholder="Кому / хто" maxlength="60" required />
+          <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
+          <input type="date" name="due" aria-label="Повернути до" />
+          <button class="btn-primary" type="submit">Додати</button>
+        </form>
+        <div id="debtList"></div>
       </section>
     </div>
   </section>
 
+  <!-- ========================= ПОМІЧНИК ROO ========================= -->
+  <section class="view" id="view-roo" hidden>
+    <div class="roo-head">
+      <span class="roo-avatar" aria-hidden="true">
+        <img src="./assets/roo.svg" alt="" width="26" height="26" onerror="this.remove()">
+      </span>
+      <div>
+        <h2>Помічник Roo</h2>
+        <p class="panel-note" id="rooState">Готую…</p>
+      </div>
+      <button class="btn" type="button" id="rooClear">Очистити</button>
+    </div>
+    <div class="roo-thread" id="rooThread" aria-live="polite"></div>
+    <div class="roo-suggest" id="rooSuggest"></div>
+    <form class="roo-composer" id="rooForm">
+      <textarea id="rooInput" rows="1" placeholder="Напишіть Roo…" aria-label="Повідомлення для Roo"></textarea>
+      <button class="btn-primary" type="submit" id="rooSend" aria-label="Надіслати">↑</button>
+    </form>
+  </section>
+
+  <!-- ============================ КАБІНЕТ ============================ -->
   <section class="view" id="view-cabinet" hidden>
     <section class="panel cabinet-panel" data-help-key="cabinet">
       <div class="cabinet-profile" id="cabinetProfile">
         <div class="cabinet-avatar" id="cabinetAvatar">К</div>
         <div><h2 id="cabinetName">Користувач</h2><p class="panel-note" id="cabinetSince" hidden></p></div>
+        <button class="btn" type="button" data-goto="overview">‹ Огляд</button>
       </div>
       <div class="cabinet-menu">
         <button class="cabinet-row" type="button" data-cabinet-target="security">Захист входу <span>›</span></button>
@@ -365,6 +415,41 @@
       <div id="cabinetDetail" hidden></div>
       <p class="cabinet-support">Питання? <a href="https://t.me/mriya7" id="cabinetSupport">Напишіть у підтримку</a></p>
     </section>
+
+    <section class="panel" id="settings-categories" data-help-key="categories">
+      <div class="panel-head"><h2>Категорії витрат</h2><span class="panel-note">назви, емодзі та кольори</span></div>
+      <form id="expenseCategoryForm" class="stack-form expense-cat-form">
+        <input type="text" name="name" placeholder="Нова категорія" maxlength="28" required />
+        <button type="button" class="expense-cat-icon-button is-empty" data-expense-icon-trigger data-icon-input-id="newExpenseCategoryIcon" data-icon-value="" aria-label="Обрати емодзі категорії" aria-haspopup="dialog" aria-expanded="false" aria-controls="expenseIconPicker">🙂</button>
+        <input type="hidden" name="icon" id="newExpenseCategoryIcon" value="" />
+        <input type="color" name="color" value="#5aa8ba" aria-label="Колір категорії" />
+        <button class="btn-primary" type="submit">Додати</button>
+      </form>
+      <div id="expenseCategoryList"></div>
+      <div class="setting-note" id="expenseCategoryNote"></div>
+    </section>
+
+    <section class="panel" id="settings-navar-history" data-help-key="navar-history">
+      <div class="panel-head"><h2>Заощадження</h2><span class="panel-note">переноси по місяцях</span></div>
+      <div class="records" id="navarList"></div>
+    </section>
+
+    <section class="panel" id="settings-security" data-help-key="service">
+      <div class="panel-head"><h2>Застосунок</h2></div>
+      <label class="setting-row"><span>Спокійний режим</span>
+        <input type="checkbox" id="calmMode" /></label>
+      <label class="setting-row"><span>Більший текст</span>
+        <input type="checkbox" id="largeText" /></label>
+      <label class="setting-row"><span>Спрощений огляд</span>
+        <input type="checkbox" id="simpleOverview" /></label>
+      <label class="setting-row"><span>PIN на вхід</span>
+        <input type="text" id="pinSet" inputmode="numeric" maxlength="12" placeholder="порожньо = вимкнено" /></label>
+      <div class="setting-actions">
+        <button class="btn" type="button" id="btnCsv">Експорт у CSV</button>
+        <button class="btn" type="button" id="btnDeleteAccount">Видалити акаунт</button>
+      </div>
+      <div class="records" id="recordsBox"></div>
+    </section>
   </section>
 
   <footer class="note">
@@ -373,31 +458,16 @@
   </footer>
 </div>
 
-<nav class="viewtabs wallet-dock" role="tablist" aria-label="Основна навігація">
-  <button class="viewtab active" data-view="main" role="tab" aria-controls="view-main" aria-selected="true">Місяць</button>
-  <button class="viewtab" data-view="plan" role="tab" aria-controls="view-plan" aria-selected="false">Плани</button>
-  <button class="viewtab" data-view="year" role="tab" aria-controls="view-year" aria-selected="false">Рік</button>
-  <button class="viewtab" data-view="cabinet" role="tab" aria-controls="view-cabinet" aria-selected="false">Кабінет</button>
-  <button class="viewtab" data-view="settings" role="tab" aria-controls="view-settings" aria-selected="false">Налаштування</button>
-  <span class="wallet-dock-mark" aria-label="Walroo"><img src="./assets/roo.svg" alt="" width="30" height="30" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'W'}))"></span>
+<nav class="viewtabs roo-dock" role="tablist" aria-label="Основна навігація">
+  <button class="viewtab active" data-view="overview" role="tab" aria-controls="view-overview" aria-selected="true">
+    <span class="viewtab-ico" aria-hidden="true">◐</span><span>Огляд</span>
+  </button>
+  <button class="viewtab" data-view="pockets" role="tab" aria-controls="view-pockets" aria-selected="false">
+    <span class="viewtab-ico" aria-hidden="true">▣</span><span>Кишені</span>
+  </button>
+  <button class="viewtab" data-view="roo" role="tab" aria-controls="view-roo" aria-selected="false">
+    <span class="viewtab-ico" aria-hidden="true"><img src="./assets/roo.svg" alt="" width="20" height="20" onerror="this.replaceWith(document.createTextNode('✦'))"></span><span>Помічник Roo</span>
+  </button>
 </nav>
 
 <div class="expense-icon-picker" id="expenseIconPicker" role="dialog" aria-label="Емодзі для витрат" hidden></div>
-<aside class="block-help-popover" id="blockHelpPopover" role="dialog" aria-modal="false" aria-labelledby="blockHelpTitle" hidden>
-  <div class="block-help-head">
-    <strong id="blockHelpTitle"></strong>
-    <button class="block-help-close" type="button" id="blockHelpClose" aria-label="Закрити підказку">✕</button>
-  </div>
-  <div class="block-help-body" id="blockHelpBody"></div>
-</aside>
-<div class="chart-tip" id="chartTip"></div>
-<div class="toast-stack" id="toastStack"></div>
-<div class="confirm-back" id="confirmBack" hidden>
-  <div class="confirm-box">
-    <p id="confirmText"></p>
-    <div class="confirm-actions">
-      <button class="btn" type="button" id="confirmNo">Скасувати</button>
-      <button class="btn-primary" type="button" id="confirmYes">Так</button>
-    </div>
-  </div>
-</div>

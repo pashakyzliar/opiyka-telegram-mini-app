@@ -465,7 +465,13 @@
     settings: {},
     viewMonth: monthKey(todayISO()),
     viewYear: Number(yearOf(todayISO())),
-    view: "main",
+    // Три екрани нижньої навігації плюс два, що відкриваються з Огляду,
+    // і кабінет — він живе за аватаром, а не у вкладках.
+    view: "overview",
+    overviewMode: "month",
+    pocketTab: "plan",
+    calendarMode: "week",
+    calendarDate: todayISO(),
     filter: null,
     ready: false
   };
@@ -1059,7 +1065,7 @@
     var a = allowance();
     var card = document.getElementById("allowanceCard");
     var bento = card ? card.closest(".bento") : null;
-    var show = state.view === "main" && a.active && a.enabled;
+    var show = state.view === "overview" && state.overviewMode === "month" && a.active && a.enabled;
     if (card) card.hidden = !show;
     if (bento) bento.dataset.allowance = show ? "on" : "off";
     if (!show) return;
@@ -1116,7 +1122,7 @@
     if (!panel || !meta || !grid) return;
     var a = allowance();
     var currentMk = monthKey(todayISO());
-    var show = state.view === "main" && state.viewMonth === currentMk && a.enabled;
+    var show = state.view === "analytics" && state.viewMonth === currentMk && a.enabled;
     panel.hidden = !show;
     if (!show) return;
 
@@ -1491,7 +1497,7 @@
 
   /* -------- year screen -------- */
   function renderYear() {
-    if (state.view !== "year") return;
+    if (!(state.view === "overview" && state.overviewMode === "year")) return;
     document.getElementById("yearLabel").textContent = state.viewYear;
     var yearTx = state.transactions.filter(function (t) { return yearOf(t.date) === String(state.viewYear); });
     var inc = sum(yearTx.filter(isIncome)), exp = sum(yearTx.filter(isExpense));
@@ -1527,7 +1533,7 @@
 
   /* -------- plan screen -------- */
   function renderRecurring() {
-    if (state.view !== "plan") return;
+    if (state.view !== "pockets") return;
     var wrap = document.getElementById("recList");
     if (!state.recurring.length) { wrap.innerHTML = '<div class="empty-note">Регулярних платежів нема.</div>'; return; }
     wrap.innerHTML = state.recurring.map(function (r) {
@@ -1552,7 +1558,7 @@
   }
 
   function renderAmortize() {
-    if (state.view !== "plan") return;
+    if (state.view !== "pockets") return;
     var wrap = document.getElementById("amList");
     if (!state.amortize.length) { wrap.innerHTML = '<div class="empty-note">Нічого не амортизуємо.</div>'; return; }
     var today = todayISO();
@@ -1580,7 +1586,7 @@
   }
 
   function renderDebts() {
-    if (state.view !== "plan") return;
+    if (state.view !== "pockets") return;
     var wrap = document.getElementById("debtList");
     var open = state.debts.filter(function (d) { return !d.settled; });
     if (!state.debts.length) { wrap.innerHTML = '<div class="empty-note">Боргів немає.</div>'; return; }
@@ -1614,8 +1620,177 @@
     box.hidden = true;
   }
 
+  /* ============================ календар ============================ */
+
+  var WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+
+  // Один прохід по місяцю: факт за днями й ознака, чи є заплановані події.
+  // Планові й фактичні суми свідомо не змішуються — це різні речі, і в
+  // підсумку дня вони показані окремо.
+  function calendarFactByDay(mk) {
+    var out = Object.create(null);
+    monthTx(mk).forEach(function (row) {
+      if (row.pending) return;
+      var day = out[row.date] || (out[row.date] = { expense: 0, income: 0, count: 0 });
+      if (isExpense(row)) day.expense += row.amount;
+      else if (isIncome(row)) day.income += row.amount;
+      day.count += 1;
+    });
+    return out;
+  }
+
+  function calendarPlannedDays(mk) {
+    var out = Object.create(null);
+    salaryDaysForMonth(mk).forEach(function (day) { out[mk + "-" + pad(day)] = true; });
+    state.recurring.forEach(function (row) {
+      if (row.active === false) return;
+      var parts = mk.split("-");
+      var dd = Math.min(Number(row.day) || 1, daysInMonth(Number(parts[0]), Number(parts[1])));
+      out[mk + "-" + pad(dd)] = true;
+    });
+    return out;
+  }
+
+  function calendarDaysToShow() {
+    var days = [];
+    if (state.calendarMode === "week") {
+      var start = weekStart(state.calendarDate);
+      for (var i = 0; i < 7; i++) days.push(isoAdd(start, i));
+      return days;
+    }
+    var mk = monthKey(state.calendarDate);
+    var parts = mk.split("-");
+    var total = daysInMonth(Number(parts[0]), Number(parts[1]));
+    // Місячна сітка починається з понеділка, тож добираємо порожні клітинки.
+    var lead = weekdayIndex(mk + "-01");
+    for (var l = 0; l < lead; l++) days.push("");
+    for (var d = 1; d <= total; d++) days.push(mk + "-" + pad(d));
+    return days;
+  }
+
+  function renderCalendar() {
+    var grid = document.getElementById("calendarGrid");
+    var dayBox = document.getElementById("calendarDay");
+    if (!grid || !dayBox) return;
+
+    // Календар завжди показує місяць, вибраний у перемикачі зверху.
+    if (monthKey(state.calendarDate) !== state.viewMonth) {
+      state.calendarDate = state.viewMonth === monthKey(todayISO())
+        ? todayISO()
+        : state.viewMonth + "-01";
+    }
+
+    var mk = monthKey(state.calendarDate);
+    var fact = calendarFactByDay(mk);
+    var planned = calendarPlannedDays(mk);
+    var today = todayISO();
+    var days = calendarDaysToShow();
+
+    grid.dataset.mode = state.calendarMode;
+    grid.innerHTML = WEEKDAY_SHORT.map(function (name) {
+      return '<span class="cal-head">' + name + '</span>';
+    }).join("") + days.map(function (iso) {
+      if (!iso) return '<span class="cal-cell cal-empty"></span>';
+      var day = fact[iso];
+      var marks = "";
+      if (day && day.expense) marks += '<i class="cal-dot cal-dot-out"></i>';
+      if (day && day.income) marks += '<i class="cal-dot cal-dot-in"></i>';
+      if (planned[iso]) marks += '<i class="cal-dot cal-dot-plan"></i>';
+      return '<button type="button" class="cal-cell" data-cal-day="' + esc(iso) + '"' +
+        (iso === state.calendarDate ? ' aria-current="date"' : '') +
+        (iso === today ? ' data-today="1"' : '') + '>' +
+        '<span class="cal-num">' + Number(iso.slice(8, 10)) + '</span>' +
+        '<span class="cal-marks">' + marks + '</span></button>';
+    }).join("");
+
+    grid.querySelectorAll("[data-cal-day]").forEach(function (cell) {
+      cell.addEventListener("click", function () {
+        state.calendarDate = cell.dataset.calDay;
+        renderCalendar();
+      });
+    });
+
+    var selected = state.calendarDate;
+    var rows = state.transactions.filter(function (row) { return !row.pending && row.date === selected; });
+    var spent = rows.filter(isExpense).reduce(function (sum, row) { return sum + row.amount; }, 0);
+    var got = rows.filter(isIncome).reduce(function (sum, row) { return sum + row.amount; }, 0);
+    var plan = plannedForDay(selected);
+    var label = selected.split("-").reverse().join(".");
+
+    var parts = [];
+    parts.push('<div class="cal-day-head"><strong>' + esc(label) + '</strong>' +
+      '<span class="cal-day-sum money">' + esc(fmt(spent)) + '</span></div>');
+    var meta = ["записів: " + rows.length];
+    if (got) meta.push("надійшло " + fmtShort(got));
+    if (plan) meta.push("план дня " + fmtShort(plan));
+    if (planned[selected]) meta.push("є заплановані події");
+    parts.push('<div class="cal-day-meta">' + esc(meta.join(" · ")) + '</div>');
+    if (rows.length) {
+      parts.push('<button class="linkish" type="button" data-goto="journal">Операції цього дня →</button>');
+    } else {
+      parts.push('<div class="empty-note">Цього дня записів немає.</div>');
+    }
+    dayBox.innerHTML = parts.join("");
+  }
+
+  /* ============================ кишені ============================ */
+
+  function renderPockets() {
+    var reserve = document.getElementById("pocketReserve");
+    var savings = document.getElementById("pocketSavings");
+    if (!reserve || !savings) return;
+    var a = allowance();
+    var s = settings();
+    reserve.textContent = fmt(s.weekReserve || 0);
+    // Запланований резерв і те, що з нього вже витрачено, — різні числа,
+    // тож показуємо обидва, а не одне «підсумкове».
+    document.getElementById("pocketReserveSub").textContent = (s.weekReserve || 0)
+      ? "витрачено " + fmtShort(a.reserveSpent) + " · лишилось " + fmtShort(Math.max(0, a.reserveLeft))
+      : "не заданий — задайте у «Мій план»";
+    savings.textContent = fmt(totalNavar());
+    var history = navarHistory();
+    document.getElementById("pocketSavingsSub").textContent = history.length
+      ? "перенесено місяців: " + history.length
+      : "переносів ще не було";
+  }
+
+  /* ========================= помічник Roo ========================= */
+
+  function renderRooScreen() {
+    var status = document.getElementById("rooState");
+    var suggest = document.getElementById("rooSuggest");
+    var thread = document.getElementById("rooThread");
+    var form = document.getElementById("rooForm");
+    if (!status || !suggest || !thread || !form) return;
+    var ready = !!caps.sample;
+    status.textContent = ready
+      ? "Питайте про свої гроші або диктуйте витрати."
+      : "AI на сервері не налаштовано — помічник поки недоступний.";
+    form.hidden = !ready;
+    suggest.hidden = !ready;
+    if (!suggest.dataset.filled) {
+      suggest.dataset.filled = "1";
+      suggest.innerHTML = ROO_EXAMPLES.map(function (text) {
+        return '<button class="roo-chip" type="button" data-roo-example="' + esc(text) + '">' + esc(text) + '</button>';
+      }).join("");
+    }
+    if (!thread.dataset.filled) {
+      thread.dataset.filled = "1";
+      thread.innerHTML = '<div class="empty-note">Тут зʼявиться листування з Roo.</div>';
+    }
+  }
+
+  var ROO_EXAMPLES = [
+    "Запиши каву за 85 грн",
+    "Скільки витрачено на доставку цього місяця?",
+    "Чому сьогодні можна витратити 0 грн?",
+    "Покажи операції за вчора"
+  ];
+
   function renderSettings() {
-    if (state.view !== "settings") return;
+    // Параметри бюджету живуть у «Кишенях», решта налаштувань — у кабінеті,
+    // тож рендер потрібен на обох екранах.
+    if (state.view !== "pockets" && state.view !== "cabinet") return;
     var s = settings();
     var salaryNote = document.getElementById("salaryPlanNote");
     if (salaryNote) {
@@ -3480,23 +3655,35 @@
   function renderAllNow() {
     dropMonthCache();
     renderDashboardDate();
+    // Перемикач місяця має сенс лише там, де показані місячні числа.
     var monthSwitcher = document.getElementById("monthSwitcher");
-    if (monthSwitcher) monthSwitcher.hidden = state.view !== "main";
+    if (monthSwitcher) {
+      monthSwitcher.hidden = !(
+        (state.view === "overview" && state.overviewMode === "month") ||
+        state.view === "journal" ||
+        state.view === "analytics"
+      );
+    }
     var steps;
-    if (state.view === "main") {
-      steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
-        renderTrend, renderLedger, renderDebts, renderTicker, renderPresets, syncSearchCats];
-    } else if (state.view === "year") {
-      steps = [renderYear];
-    } else if (state.view === "plan") {
-      steps = [renderRecurring, renderAmortize, renderDebts];
-    } else if (state.view === "settings") {
+    if (state.view === "overview") {
+      // Динаміка за шість місяців малюється в #trendWrap, а він живе
+      // всередині річного режиму — тому й рендериться разом із ним.
+      steps = state.overviewMode === "year"
+        ? [renderYear, renderTrend]
+        : [renderStats, renderAllowance, renderCalendar, renderTicker];
+    } else if (state.view === "journal") {
+      steps = [renderLedger, renderPresets, syncSearchCats];
+    } else if (state.view === "analytics") {
+      steps = [renderDonut, renderWeekForecast];
+    } else if (state.view === "pockets") {
+      steps = [renderPockets, renderSettings, renderBudgets, renderRecurring, renderAmortize, renderDebts];
+    } else if (state.view === "cabinet") {
       steps = [renderSettings];
     } else {
       steps = [];
     }
     steps.forEach(function (fn) { fn(); });
-    if (state.view === "main") refreshExpenseLabels();
+    if (state.view === "overview" || state.view === "journal") refreshExpenseLabels();
     ensureBlockHelpButtons(document);
   }
 
@@ -3935,35 +4122,174 @@
       });
     }
 
+    // Кабінет навмисно не є вкладкою: у нижньому меню рівно три пункти,
+    // а кабінет відкривається аватаром у шапці.
+    var VIEWS = ["overview", "journal", "analytics", "pockets", "roo", "cabinet"];
+
+    function syncDock() {
+      document.querySelectorAll(".viewtab").forEach(function (tab) {
+        var on = tab.dataset.view === state.view;
+        tab.classList.toggle("active", on);
+        tab.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    }
+
     var vtBusy = false;
-    document.querySelectorAll(".viewtab").forEach(function (tab) {
-      tab.addEventListener("click", function () {
-        rememberViewScroll(state.view);
-        state.view = tab.dataset.view;
-        document.querySelectorAll(".viewtab").forEach(function (t) {
-          var on = t === tab;
-          t.classList.toggle("active", on); t.setAttribute("aria-selected", on ? "true" : "false");
+    function goTo(view, afterSwap) {
+      if (VIEWS.indexOf(view) < 0) return;
+      if (view === state.view) { if (afterSwap) afterSwap(); return; }
+      rememberViewScroll(state.view);
+      state.view = view;
+      syncDock();
+      function swap() {
+        VIEWS.forEach(function (v) {
+          var el = document.getElementById("view-" + v);
+          if (el) el.hidden = v !== state.view;
         });
-        function swap() {
-          ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== state.view; });
-          if (state.view === "cabinet") showCabinetProfile();
-          renderAll();
-          restoreViewScroll(state.view);
-        }
-        // A second transition started while one is still running rejects with
-        // "invalid state", and a synchronous throw would leave the screen on
-        // the old view entirely. The swap must happen either way — the
-        // transition is decoration on top of it.
-        if (document.startViewTransition && !state.settings.calmMode && !vtBusy) {
-          vtBusy = true;
-          var vt;
-          try { vt = document.startViewTransition(swap); }
-          catch (e) { vtBusy = false; swap(); return; }
-          var done = function () { vtBusy = false; };
-          if (vt && vt.finished && vt.finished.then) vt.finished.then(done, done);
-          else done();
-          if (vt && vt.ready && vt.ready.catch) vt.ready.catch(function () {});
-        } else swap();
+        if (state.view === "cabinet") showCabinetProfile();
+        if (state.view === "roo") renderRooScreen();
+        renderAll();
+        restoreViewScroll(state.view);
+        if (afterSwap) afterSwap();
+      }
+      // Друга анімація поверх незавершеної відхиляється з «invalid state», а
+      // синхронний виняток лишив би екран на старому вигляді. Тому підміна
+      // має відбутись у будь-якому разі — анімація лише прикраса зверху.
+      // Прихована сторінка не малює кадрів, і колбек переходу не виконався б
+      // узагалі, тож там одразу йдемо прямим шляхом.
+      var canAnimate = document.startViewTransition &&
+        !state.settings.calmMode &&
+        !vtBusy &&
+        document.visibilityState === "visible";
+      if (!canAnimate) { swap(); return; }
+      vtBusy = true;
+      var vt;
+      try { vt = document.startViewTransition(swap); }
+      catch (e) { vtBusy = false; swap(); return; }
+      var done = function () { vtBusy = false; };
+      if (vt && vt.finished && vt.finished.then) vt.finished.then(done, done);
+      else done();
+      if (vt && vt.ready && vt.ready.catch) vt.ready.catch(function () {});
+    }
+    window.__walrooGoTo = goTo;
+
+    document.querySelectorAll(".viewtab").forEach(function (tab) {
+      tab.addEventListener("click", function () { goTo(tab.dataset.view); });
+    });
+
+    // Переходи всередині екранів: «‹ Огляд», «Журнал», «Аналітика», ліміти.
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest("[data-goto]");
+      if (!link) return;
+      var target = link.dataset.goto;
+      if (target === "limits") {
+        state.pocketTab = "plan";
+        goTo("pockets", function () {
+          syncPocketTabs();
+          var el = document.getElementById("pockets-limits");
+          if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+        });
+        return;
+      }
+      goTo(target);
+    });
+
+    var cabinetOpen = document.getElementById("cabinetOpen");
+    if (cabinetOpen) cabinetOpen.addEventListener("click", function () { goTo("cabinet"); });
+
+    // Огляд: місяць або рік.
+    function syncOverviewMode() {
+      var month = document.getElementById("overview-month");
+      var year = document.getElementById("overview-year");
+      if (month) month.hidden = state.overviewMode !== "month";
+      if (year) year.hidden = state.overviewMode !== "year";
+      document.querySelectorAll("[data-overview-mode]").forEach(function (btn) {
+        var on = btn.dataset.overviewMode === state.overviewMode;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    }
+    document.querySelectorAll("[data-overview-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.overviewMode = btn.dataset.overviewMode;
+        syncOverviewMode();
+        renderAll();
+      });
+    });
+    syncOverviewMode();
+
+    // Кишені: три вкладки.
+    function syncPocketTabs() {
+      ["plan", "payments", "debts"].forEach(function (name) {
+        var el = document.getElementById("pockets-" + name);
+        if (el) el.hidden = name !== state.pocketTab;
+      });
+      document.querySelectorAll("[data-pocket-tab]").forEach(function (btn) {
+        var on = btn.dataset.pocketTab === state.pocketTab;
+        btn.classList.toggle("active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    }
+    document.querySelectorAll("[data-pocket-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.pocketTab = btn.dataset.pocketTab;
+        syncPocketTabs();
+        renderAll();
+      });
+    });
+    syncPocketTabs();
+
+    // Календар: тиждень або місяць.
+    document.querySelectorAll("[data-calendar-mode]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.calendarMode = btn.dataset.calendarMode;
+        document.querySelectorAll("[data-calendar-mode]").forEach(function (other) {
+          var on = other === btn;
+          other.classList.toggle("active", on);
+          other.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        renderCalendar();
+      });
+    });
+
+    var openAdd = document.getElementById("openAddRecord");
+    if (openAdd) openAdd.addEventListener("click", function () {
+      goTo("journal", function () { focusAmount(); });
+    });
+    var openJournalQuick = document.getElementById("openJournalQuick");
+    if (openJournalQuick) openJournalQuick.addEventListener("click", function () { goTo("journal"); });
+
+    // Приховування сум: клас на body, самі значення лишаються в DOM для
+    // читалок екрана, візуально розмиваються токеном.
+    var toggleAmounts = document.getElementById("toggleAmounts");
+    if (toggleAmounts) toggleAmounts.addEventListener("click", function () {
+      var on = document.body.classList.toggle("amounts-hidden");
+      toggleAmounts.setAttribute("aria-pressed", on ? "true" : "false");
+      toggleAmounts.setAttribute("aria-label", on ? "Показати суми" : "Приховати суми");
+      try { localStorage.setItem("walroo_amounts_hidden", on ? "1" : "0"); } catch (e) {}
+    });
+    try {
+      if (localStorage.getItem("walroo_amounts_hidden") === "1") {
+        document.body.classList.add("amounts-hidden");
+        if (toggleAmounts) toggleAmounts.setAttribute("aria-pressed", "true");
+      }
+    } catch (e) {}
+
+    // Зручності зберігаємо локально, а не в акаунті: це властивість пристрою,
+    // а не фінансових даних, і на планшеті людина може хотіти інакше.
+    [
+      { id: "largeText", cls: "text-large", key: "walroo_text_large" },
+      { id: "simpleOverview", cls: "simple-overview", key: "walroo_simple_overview" }
+    ].forEach(function (item) {
+      var input = document.getElementById(item.id);
+      if (!input) return;
+      var saved = false;
+      try { saved = localStorage.getItem(item.key) === "1"; } catch (e) {}
+      input.checked = saved;
+      document.body.classList.toggle(item.cls, saved);
+      input.addEventListener("change", function () {
+        document.body.classList.toggle(item.cls, input.checked);
+        try { localStorage.setItem(item.key, input.checked ? "1" : "0"); } catch (e) {}
       });
     });
 
@@ -3974,16 +4300,17 @@
         if (target === "glossary") { showCabinetGlossary(); return; }
         if (target === "quick") { showCabinetQuick(); return; }
         if (target === "import") { showCabinetImport(); return; }
-        rememberViewScroll(state.view);
-        state.view = "settings";
-        document.querySelectorAll(".viewtab").forEach(function (tab) {
-          var on = tab.dataset.view === "settings";
-          tab.classList.toggle("active", on); tab.setAttribute("aria-selected", on ? "true" : "false");
-        });
-        ["main", "year", "plan", "cabinet", "settings"].forEach(function (v) { document.getElementById("view-" + v).hidden = v !== "settings"; });
-        var map = { security: "settings-security", categories: "settings-categories", limits: "settings-limits" };
-        var el = document.getElementById(map[target]);
-        renderAll();
+        // Ліміти живуть у «Кишенях», категорії — тут же в кабінеті.
+        if (target === "limits") {
+          state.pocketTab = "plan";
+          goTo("pockets", function () {
+            syncPocketTabs();
+            var el = document.getElementById("pockets-limits");
+            if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+          });
+          return;
+        }
+        var el = document.getElementById("settings-" + target);
         if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
       });
     });
@@ -4291,6 +4618,9 @@
     Promise.resolve(useCap("sample")).catch(function () { return null; }).then(function (s) {
       caps.sample = s;
       document.getElementById("aiBtn").hidden = !s;
+      // Стан помічника відомий лише після відповіді сервера, тож екран Roo
+      // перемальовуємо тут, а не на етапі першого рендера.
+      renderRooScreen();
     });
   }
 

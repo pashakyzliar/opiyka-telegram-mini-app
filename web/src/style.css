@@ -1144,10 +1144,10 @@ body { font-family: var(--font-text); font-size: var(--text-body); }
 .month-switcher .icon-btn { min-width: 31px; border: 0; background: transparent; color: var(--ink-soft); }
 .month-switcher .month-label { min-width: 138px; color: var(--ink); font-size: 11px; }
 
-#view-main { display: flex; flex-direction: column; gap: 16px; }
-#view-main > .bento { order: 1; margin: 0; }
-#view-main > .grid-2 { order: 2; }
-#view-main > .panel-ledger { order: 3; }
+#view-overview, #view-journal, #view-analytics, #view-pockets, #view-cabinet { display: flex; flex-direction: column; gap: 16px; }
+#overview-month, #overview-year,
+#pockets-plan, #pockets-payments, #pockets-debts { display: flex; flex-direction: column; gap: 16px; }
+#view-overview > .bento, #overview-month > .bento { margin: 0; }
 .panel, .cell { border-color: var(--hair); background: linear-gradient(180deg, rgba(255,255,255,.025), transparent 42%), var(--panel); box-shadow: var(--shadow); }
 .panel::before, .cell::after { display: none; }
 
@@ -1718,3 +1718,248 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* ===================================================================
+   ROO POP — навігація та нові компоненти.
+   =================================================================== */
+
+/* Шапка: бренд ліворуч, дії праворуч, дата — окремим рядком під ними. */
+.dashboard-header {
+  grid-template-columns: 1fr auto;
+  grid-template-areas: "brand actions" "date date";
+  gap: 10px 12px;
+  min-height: 0;
+  padding: 16px 18px 18px;
+  border-radius: var(--radius-lg);
+}
+.dashboard-brand { grid-area: brand; }
+.dashboard-actions { grid-area: actions; display: flex; align-items: center; gap: 8px; }
+.dashboard-date { grid-area: date; }
+.head-btn, .avatar-btn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--roo-divider);
+  border-radius: 50%;
+  background: var(--roo-surface-2);
+  color: var(--ink);
+  font: 600 15px/1 var(--font-text);
+  cursor: pointer;
+}
+.avatar-btn { background: var(--roo-purple-soft); border-color: transparent; font-weight: 700; }
+.head-btn[aria-pressed="true"] { background: var(--roo-purple); color: #fff; border-color: transparent; }
+.head-btn:focus-visible, .avatar-btn:focus-visible { outline: 2px solid var(--roo-purple); outline-offset: 2px; }
+.sync-pill { font-size: 10px; }
+
+/* Сегментовані перемикачі: Місяць/Рік, вигляд календаря, вкладки кишень. */
+.seg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--roo-surface-2);
+  border: 1px solid var(--roo-divider);
+}
+.seg-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.seg-btn {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: 600 14px/1 var(--font-text);
+  cursor: pointer;
+}
+.seg-btn.active { background: var(--roo-purple); color: #fff; }
+.seg-btn:focus-visible { outline: 2px solid var(--roo-purple); outline-offset: 2px; }
+.seg-sm { padding: 3px; border-radius: 999px; }
+.seg-sm .seg-btn { min-height: 32px; font-size: 12px; }
+.panel-head .seg { flex: 0 0 auto; }
+
+/* Головна дія Огляду. */
+.overview-actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.btn-add { min-height: 58px; border-radius: var(--radius); font-size: 16px; font-weight: 700; }
+.btn-icon-lg {
+  min-width: 58px;
+  min-height: 58px;
+  border-radius: var(--radius);
+  background: var(--roo-purple-soft);
+  border: 0;
+  font-size: 20px;
+}
+.overview-links { display: flex; justify-content: space-between; gap: 12px; }
+.linkish {
+  min-height: 44px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--roo-purple);
+  font: 600 14px/1 var(--font-text);
+  cursor: pointer;
+}
+.linkish:focus-visible { outline: 2px solid var(--roo-purple); outline-offset: 2px; border-radius: 6px; }
+
+/* Календар. */
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.calendar-grid[data-mode="week"] { gap: 6px; }
+.cal-head {
+  padding: 4px 0;
+  color: var(--ink-muted);
+  font: 600 11px/1 var(--font-text);
+  text-align: center;
+}
+.cal-cell {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 7px 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--roo-surface-2);
+  color: var(--ink);
+  font-family: var(--font-text);
+  cursor: pointer;
+}
+.cal-empty { background: none; border: 0; min-height: 0; cursor: default; }
+.cal-num { font: 700 15px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.cal-cell[data-today="1"] { border-color: var(--roo-purple-soft); }
+.cal-cell[aria-current="date"] { background: var(--roo-purple); color: #fff; }
+.cal-cell:focus-visible { outline: 2px solid var(--roo-purple); outline-offset: 2px; }
+.cal-marks { display: flex; gap: 3px; min-height: 6px; }
+.cal-dot { width: 5px; height: 5px; border-radius: 50%; display: inline-block; }
+.cal-dot-out { background: var(--roo-negative); }
+.cal-dot-in { background: var(--roo-positive); }
+/* Планова подія — кільце, а не заливка: статус видно й без кольору. */
+.cal-dot-plan { background: transparent; box-shadow: inset 0 0 0 1.5px var(--roo-purple); }
+.cal-cell[aria-current="date"] .cal-dot-plan { box-shadow: inset 0 0 0 1.5px #fff; }
+.calendar-day { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--roo-divider); }
+.cal-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cal-day-head strong { font: 700 16px/1.2 var(--font-display); }
+.cal-day-sum { font: 700 18px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.cal-day-meta { margin-top: 4px; color: var(--ink-soft); font-size: var(--text-small); }
+
+/* Нижня навігація: рівно три пункти, Roo завжди праворуч. */
+.roo-dock {
+  position: fixed;
+  z-index: 50;
+  left: 50%;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 16px));
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--roo-divider);
+  border-radius: var(--radius-lg);
+  background: var(--roo-surface);
+  box-shadow: 0 -6px 26px rgba(48, 25, 72, .12);
+}
+.roo-dock .viewtab {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font: 600 12px/1.15 var(--font-text);
+  text-align: center;
+  cursor: pointer;
+}
+.roo-dock .viewtab.active { background: var(--roo-purple); color: #fff; }
+.roo-dock .viewtab:focus-visible { outline: 2px solid var(--roo-purple); outline-offset: 2px; }
+.viewtab-ico { display: grid; place-items: center; height: 20px; font-size: 16px; }
+.viewtab-ico img { display: block; width: 20px; height: 20px; object-fit: contain; }
+.roo-dock .viewtab.active .viewtab-ico img { filter: brightness(0) invert(1); }
+/* Док фіксований, тож контент має закінчуватись вище за нього. */
+.app { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+
+/* Помічник Roo. */
+#view-roo { display: flex; flex-direction: column; gap: 12px; min-height: 60vh; }
+.roo-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }
+.roo-head h2 { margin: 0; font-size: 20px; }
+.roo-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--roo-purple-soft);
+}
+.roo-thread { display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
+.roo-suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+.roo-chip {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--roo-divider);
+  border-radius: 999px;
+  background: var(--roo-surface);
+  color: var(--ink);
+  font: 500 13px/1 var(--font-text);
+  cursor: pointer;
+}
+.roo-composer {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr 52px;
+  gap: 8px;
+  padding-top: 8px;
+  background: linear-gradient(180deg, transparent, var(--roo-lavender) 40%);
+}
+.roo-composer textarea {
+  min-height: 52px;
+  max-height: 140px;
+  padding: 14px 16px;
+  border: 1px solid var(--roo-divider);
+  border-radius: var(--radius);
+  background: var(--roo-surface);
+  color: var(--ink);
+  font: 400 15px/1.4 var(--font-text);
+  resize: none;
+}
+.roo-composer .btn-primary { min-height: 52px; border-radius: var(--radius); font-size: 20px; }
+
+/* Кишені: дві картки зверху. */
+.bento-pockets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.bento-pockets .cell { min-height: 120px; }
+
+@media (max-width: 380px) {
+  .bento-pockets { grid-template-columns: 1fr; }
+  .roo-dock .viewtab { font-size: 11px; }
+  .cal-cell { min-height: 46px; }
+}
+@media (max-width: 330px) {
+  .dashboard-actions { gap: 6px; }
+  .head-btn, .avatar-btn { width: 40px; height: 40px; }
+}
+
+/* Зручності з кабінету. Збільшення тексту не чіпає великі суми —
+   вони й так адаптуються до ширини екрана. */
+body.text-large {
+  --text-body: 18px;
+  --text-small: 15px;
+  --text-micro: 14px;
+  font-size: var(--text-body);
+}
+body.text-large .cell-label,
+body.text-large .panel-note { font-size: var(--text-micro); }
+body.text-large .empty-note,
+body.text-large .setting-note,
+body.text-large .import-note { font-size: var(--text-small); }
+body.text-large .seg-btn,
+body.text-large .roo-dock .viewtab { font-size: 14px; }
+
+/* Спрощений огляд: лишаються баланс, денний план і календар. */
+body.simple-overview #overview-month .cell-in,
+body.simple-overview #overview-month .cell-out,
+body.simple-overview .overview-links { display: none; }
