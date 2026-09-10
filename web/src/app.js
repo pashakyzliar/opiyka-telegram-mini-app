@@ -1086,10 +1086,9 @@
     if (card) card.hidden = !show;
     if (bento) bento.dataset.allowance = show ? "on" : "off";
     if (!show) return;
-    var setup = document.getElementById("allowanceSetup");
     var el = document.getElementById("allowanceValue");
     var ready = a.active && a.enabled && a.configured;
-    if (setup) setup.hidden = ready;
+    // «Чому?» лишається завжди: воно пояснює і нуль, і будь-яке інше число.
     document.getElementById("allowanceBar").parentNode.hidden = !ready;
 
     if (!ready) {
@@ -1798,6 +1797,15 @@
       parts.push('<div class="empty-note">Цього дня записів немає.</div>');
     }
     dayBox.innerHTML = parts.join("");
+
+    var reserveBox = document.getElementById("calendarReserve");
+    if (reserveBox) {
+      var weekReserve = settings().weekReserve || 0;
+      reserveBox.hidden = !weekReserve;
+      reserveBox.innerHTML = weekReserve
+        ? 'Резерв тижня <strong class="money">' + esc(fmtShort(weekReserve)) + '</strong>'
+        : "";
+    }
   }
 
   /* ============================ кишені ============================ */

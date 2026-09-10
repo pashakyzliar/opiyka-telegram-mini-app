@@ -70,23 +70,31 @@
     <!-- Поки файлів немає, onerror лишає літерний знак: зображення, що не
          завантажилось, не повинно висіти зламаною іконкою в шапці. -->
     <div class="dashboard-brand" aria-label="Walroo">
-      <span class="wallet-mini-mark" id="brandMark">
-        <img src="./assets/roo.svg" alt="" width="22" height="22" onerror="this.remove()">
+      <!-- Спершу пробуємо ваш файл, далі вектор, і лише потім здаємось.
+           Так покладений у assets логотип підхоплюється без правок коду. -->
+      <span class="brand-tile" id="brandMark">
+        <img src="./assets/roo.png" alt="" width="34" height="34"
+             onerror="if(!this.dataset.f){this.dataset.f='1';this.src='./assets/roo.svg';}else{this.remove();}">
       </span>
-      <span class="brand-word">walroo</span>
+      <span class="brand-text">
+        <span class="brand-word">walroo</span>
+        <span class="brand-tagline">Твої гроші. Твій темп.</span>
+      </span>
     </div>
     <div class="dashboard-actions">
-      <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
       <button class="head-btn" type="button" id="toggleAmounts" aria-pressed="false" aria-label="Приховати суми" title="Приховати суми">👁</button>
       <button class="head-btn" type="button" id="toggleTheme" aria-pressed="false" aria-label="Синій інтерфейс" title="Синій інтерфейс">🌙</button>
       <button class="avatar-btn" type="button" id="cabinetOpen" aria-label="Кабінет">
         <span id="cabinetAvatarMini">К</span>
       </button>
     </div>
+    <!-- Дата й статус звʼязку лишились у DOM: їх наповнює renderDashboardDate,
+         а показуються вони як підпис під слоганом. -->
     <div class="dashboard-date" aria-live="polite">
       <span class="dashboard-weekday" id="dashboardWeekday"></span>
       <strong id="dashboardToday"></strong>
       <span class="dashboard-greeting" id="dashboardGreeting"></span>
+      <span class="sync-pill"><span id="syncDot" class="sync-dot"></span><span id="syncText">З'єднання…</span></span>
     </div>
   </header>
 
@@ -100,49 +108,54 @@
 
   <!-- ============================ ОГЛЯД ============================ -->
   <section class="view" id="view-overview">
-    <div class="seg" role="tablist" aria-label="Період огляду">
-      <button class="seg-btn active" type="button" data-overview-mode="month" role="tab" aria-selected="true">Місяць</button>
-      <button class="seg-btn" type="button" data-overview-mode="year" role="tab" aria-selected="false">Рік</button>
+    <div class="view-head">
+      <h2 class="view-title">Огляд</h2>
+      <div class="seg" role="tablist" aria-label="Період огляду">
+        <button class="seg-btn active" type="button" data-overview-mode="month" role="tab" aria-selected="true">Місяць</button>
+        <button class="seg-btn" type="button" data-overview-mode="year" role="tab" aria-selected="false">Рік</button>
+      </div>
     </div>
 
     <div id="overview-month">
-      <div class="bento" data-allowance="on">
-        <div class="cell cell-hero pocket pocket-primary" id="allowanceCard" data-help-key="allowance">
-          <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
-          <span class="denomination money" id="allowanceValue">—</span>
-          <div class="cell-meta">
-            <span id="allowanceSpentToday">Сьогодні витрачено 0 ₴</span>
-            <span id="allowanceHint"></span>
-          </div>
-          <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
-          <button class="btn allowance-setup" type="button" id="allowanceSetup" data-goto="limits" hidden>Налаштувати тиждень</button>
-        </div>
+      <p class="slogan">Твій темп.<br>Твої правила.</p>
 
-        <div class="cell cell-balance pocket pocket-soft" data-help-key="balance">
-          <span class="cell-label">Поточний баланс <span class="cell-sub2">усі ваші гроші</span></span>
+      <div class="bento" data-allowance="on">
+        <div class="cell cell-balance pocket pocket-primary" data-help-key="balance">
+          <span class="cell-rule" aria-hidden="true"></span>
+          <span class="cell-label">Поточний баланс</span>
           <span class="cell-value money" id="statBalance">0,00 ₴</span>
-          <div class="cell-sub" id="statBalanceSub"></div>
+          <div class="cell-sub" id="statBalanceSub">Твої гроші під рукою</div>
           <svg id="statSpark" class="spark" width="100%" height="26" viewBox="0 0 160 26" preserveAspectRatio="none"></svg>
         </div>
 
+        <div class="cell cell-hero pocket pocket-soft" id="allowanceCard" data-help-key="allowance">
+          <span class="cell-label">На сьогодні залишок плану <span class="cell-sub2" id="allowanceBasis"></span></span>
+          <span class="denomination money" id="allowanceValue">—</span>
+          <div class="cell-meta">
+            <span id="allowanceSpentToday"></span>
+            <span id="allowanceHint"></span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" id="allowanceBar" style="width:0%"></div></div>
+          <button class="linkish allowance-why" type="button" id="allowanceSetup" data-goto="limits">Чому? ↗</button>
+        </div>
+
         <div class="cell cell-out pocket pocket-accent" data-help-key="expenses">
-          <span class="cell-label">Витрати місяця</span>
-          <span class="cell-value money" id="statExpense">0,00 ₴</span>
-          <div class="cell-sub" id="statExpenseSub"></div>
-        </div>
-
-        <div class="cell cell-in" data-help-key="income-fact">
-          <span class="cell-label">Отримано <span class="cell-sub2">фактичні надходження</span></span>
-          <span class="cell-value positive money" id="statIncomeFact">0,00 ₴</span>
-          <div class="cell-sub" id="statIncomeFactSub"></div>
-        </div>
-
-        <div class="cell cell-in" data-help-key="income-plan">
-          <span class="cell-label">План доходу <span class="cell-sub2">на місяць</span></span>
-          <span class="cell-value positive money" id="statIncome">0,00 ₴</span>
-          <div class="cell-sub" id="statIncomeSub"></div>
+          <div class="cell-out-main">
+            <span class="cell-label">Витрати місяця</span>
+            <span class="cell-value money" id="statExpense">0,00 ₴</span>
+          </div>
+          <button class="linkish cell-out-link" type="button" data-goto="journal"><span id="statExpenseSub"></span> →</button>
         </div>
       </div>
+
+      <p class="stat-line" data-help-key="income-fact">
+        Отримано за місяць <strong class="money" id="statIncomeFact">0,00 ₴</strong>
+        <span class="stat-line-sub" id="statIncomeFactSub"></span>
+      </p>
+      <p class="stat-line" data-help-key="income-plan">
+        План доходу <strong class="money" id="statIncome">0,00 ₴</strong>
+        <span class="stat-line-sub" id="statIncomeSub"></span>
+      </p>
 
       <section class="panel panel-calendar" id="calendarPanel" data-help-key="calendar">
         <div class="panel-head">
@@ -154,11 +167,12 @@
         </div>
         <div class="calendar-grid" id="calendarGrid"></div>
         <div class="calendar-day" id="calendarDay"></div>
+        <div class="calendar-reserve" id="calendarReserve"></div>
       </section>
 
       <div class="overview-actions">
-        <button class="btn-primary btn-add" type="button" id="openAddRecord">+ Додати запис</button>
-        <button class="btn btn-icon-lg" type="button" id="openJournalQuick" aria-label="Журнал">🧾</button>
+        <button class="btn-add" type="button" id="openAddRecord">+ Додати запис</button>
+        <button class="btn-icon-lg" type="button" id="openJournalQuick" aria-label="Журнал">🧾</button>
       </div>
       <div class="overview-links">
         <button class="linkish" type="button" data-goto="journal">Журнал</button>
@@ -390,7 +404,8 @@
   <section class="view" id="view-roo" hidden>
     <div class="roo-head">
       <span class="roo-avatar" aria-hidden="true">
-        <img src="./assets/roo.svg" alt="" width="26" height="26" onerror="this.remove()">
+        <img src="./assets/roo.png" alt="" width="26" height="26"
+             onerror="if(!this.dataset.f){this.dataset.f='1';this.src='./assets/roo.svg';}else{this.replaceWith(document.createTextNode('🦘'));}">
       </span>
       <div>
         <h2>Помічник Roo</h2>

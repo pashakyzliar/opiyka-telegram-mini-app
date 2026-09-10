@@ -146,7 +146,7 @@
         var settingsErrors = settingsListeners.slice();
         collectionListeners = [];
         settingsListeners = [];
-        if (timer) { clearInterval(timer); timer = null; }
+        stopTimer();
         collectionErrors.forEach(function (x) { if (x.onError) x.onError(err); });
         settingsErrors.forEach(function (x) { if (x.onError) x.onError(err); });
         throw err;
@@ -154,9 +154,47 @@
       return refreshPromise;
     }
 
+    /* Опитування сервера.
+     *
+     * Було: setInterval кожні 15 секунд, назавжди. Згорнутий Mini App
+     * продовжував тягнути повний стан акаунта чотири рази на хвилину —
+     * при тому що дані змінює той самий пристрій, який зараз нічого не
+     * робить. Стало:
+     *   • поки вкладка прихована, таймер зупинений повністю;
+     *   • при поверненні — одне негайне оновлення й далі звичайний ритм;
+     *   • інтервал зріс до 45 с, бо кожен власний запис і так робить
+     *     refresh одразу після себе, тож полінг ловить лише зміни з бота
+     *     чи іншого пристрою.
+     */
+    var POLL_MS = 45000;
+    var visibilityBound = false;
+
+    function hasListeners() {
+      return !!(collectionListeners.length || settingsListeners.length);
+    }
+
+    function stopTimer() {
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+
     function startPolling() {
-      if (timer || (!collectionListeners.length && !settingsListeners.length)) return;
-      timer = setInterval(function () { refresh().catch(function () {}); }, 15000);
+      bindVisibility();
+      if (timer || !hasListeners()) return;
+      if (document.visibilityState === "hidden") return;
+      timer = setInterval(function () { refresh().catch(function () {}); }, POLL_MS);
+    }
+
+    function bindVisibility() {
+      if (visibilityBound) return;
+      visibilityBound = true;
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") { stopTimer(); return; }
+        if (!hasListeners()) return;
+        // Поки застосунок був згорнутий, дані могли змінитись у боті —
+        // тож спершу одне негайне оновлення, і лише потім звичайний ритм.
+        refresh().catch(function () {});
+        startPolling();
+      });
     }
 
     function afterWrite(result) {
@@ -166,10 +204,7 @@
     }
 
     function stopUnusedPolling() {
-      if (timer && !collectionListeners.length && !settingsListeners.length) {
-        clearInterval(timer);
-        timer = null;
-      }
+      if (!hasListeners()) stopTimer();
     }
 
     function listenCollection(collection, onData, onError) {
