@@ -1535,7 +1535,16 @@
   function renderRecurring() {
     if (state.view !== "pockets") return;
     var wrap = document.getElementById("recList");
-    if (!state.recurring.length) { wrap.innerHTML = '<div class="empty-note">Регулярних платежів нема.</div>'; return; }
+    var summary = document.getElementById("recSummary");
+    if (summary) {
+      var active = state.recurring.filter(function (r) { return r.active !== false; });
+      var monthly = active.reduce(function (sum, r) { return sum + (Number(r.amount) || 0); }, 0);
+      summary.hidden = !active.length;
+      summary.textContent = active.length
+        ? "Щомісяця списується " + fmtShort(monthly) + " · активних: " + active.length
+        : "";
+    }
+    if (!state.recurring.length) { wrap.innerHTML = '<div class="empty-note">Регулярних платежів немає.</div>'; return; }
     wrap.innerHTML = state.recurring.map(function (r) {
       return '<div class="rec-row' + (r.active === false ? ' off' : '') + '">' +
         '<span class="cat-dot" style="background:' + colorFor("expense", r.category) + '"></span>' +
@@ -1560,7 +1569,19 @@
   function renderAmortize() {
     if (state.view !== "pockets") return;
     var wrap = document.getElementById("amList");
-    if (!state.amortize.length) { wrap.innerHTML = '<div class="empty-note">Нічого не амортизуємо.</div>'; return; }
+    var summary = document.getElementById("amSummary");
+    if (summary) {
+      // Це і є «розподіл за місяцями»: скільки великі витрати з'їдають
+      // щомісяця, якщо відкладати на них рівними частинами.
+      var perMonth = state.amortize.reduce(function (sum, a) {
+        return sum + (Number(a.amount) || 0) / Math.max(1, Number(a.months) || 1);
+      }, 0);
+      summary.hidden = !state.amortize.length;
+      summary.textContent = state.amortize.length
+        ? "Щомісяця відкладається " + fmtShort(perMonth) + " на " + state.amortize.length + " поз."
+        : "";
+    }
+    if (!state.amortize.length) { wrap.innerHTML = '<div class="empty-note">Великих витрат ще немає.</div>'; return; }
     var today = todayISO();
     wrap.innerHTML = state.amortize.map(function (a) {
       var months = Math.max(1, Number(a.months) || 1);
@@ -1589,17 +1610,28 @@
     if (state.view !== "pockets") return;
     var wrap = document.getElementById("debtList");
     var open = state.debts.filter(function (d) { return !d.settled; });
-    if (!state.debts.length) { wrap.innerHTML = '<div class="empty-note">Боргів немає.</div>'; return; }
     var lent = open.filter(function (d) { return d.direction === "lent"; }).reduce(function (s, d) { return s + d.amount; }, 0);
     var borrowed = open.filter(function (d) { return d.direction === "borrowed"; }).reduce(function (s, d) { return s + d.amount; }, 0);
-    wrap.innerHTML = '<div class="debt-summary"><span>Мені винні ' + esc(fmtShort(lent)) + '</span><span>Я винен ' + esc(fmtShort(borrowed)) + '</span></div>' +
-      state.debts.map(function (d) {
-        return '<div class="debt-row' + (d.settled ? ' settled' : '') + '">' +
+    var summaryBox = document.getElementById("debtSummaryBox");
+    if (summaryBox) {
+      summaryBox.hidden = !open.length;
+      summaryBox.textContent = open.length
+        ? "Мені винні " + fmtShort(lent) + " · я винен " + fmtShort(borrowed)
+        : "";
+    }
+    if (!state.debts.length) { wrap.innerHTML = '<div class="empty-note">Боргів немає.</div>'; return; }
+    var todayIso = todayISO();
+    wrap.innerHTML = state.debts.map(function (d) {
+        // Термін показуємо по-людськи й окремо позначаємо прострочення —
+        // сира дата у форматі бази нічого не каже.
+        var overdue = !d.settled && d.due && d.due < todayIso;
+        var dueText = d.settled ? "закрито" : (d.due ? fmtDate(d.due) : "без терміну");
+        return '<div class="debt-row' + (d.settled ? ' settled' : '') + (overdue ? ' overdue' : '') + '">' +
           '<span class="debt-dir ' + esc(d.direction) + '">' + (d.direction === "lent" ? "→" : "←") + '</span>' +
           '<span class="debt-person">' + esc(d.person) + '</span>' +
           '<span class="debt-sum">' + esc(fmtShort(d.amount)) + '</span>' +
-          '<span class="debt-due">' + esc(d.due || "") + '</span>' +
-          '<button class="icon-btn" type="button" data-settle="' + esc(d.id) + '" aria-label="Закрити борг">' + (d.settled ? '↺' : '✔') + '</button>' +
+          '<span class="debt-due">' + esc(dueText) + (overdue ? ' · прострочено' : '') + '</span>' +
+          '<button class="icon-btn" type="button" data-settle="' + esc(d.id) + '" aria-label="' + (d.settled ? 'Повернути в активні' : 'Закрити борг') + '">' + (d.settled ? '↺' : '✔') + '</button>' +
           '<button class="icon-btn" type="button" data-del-debt="' + esc(d.id) + '" aria-label="Видалити">✕</button></div>';
       }).join("");
     wrap.querySelectorAll("[data-del-debt]").forEach(function (b) {
@@ -1623,6 +1655,11 @@
   /* ============================ календар ============================ */
 
   var WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+
+  function fmtDate(iso) {
+    var parts = String(iso || "").split("-");
+    return parts.length === 3 ? parts[2] + "." + parts[1] + "." + parts[0] : String(iso || "");
+  }
 
   // Один прохід по місяцю: факт за днями й ознака, чи є заплановані події.
   // Планові й фактичні суми свідомо не змішуються — це різні речі, і в
@@ -1715,7 +1752,7 @@
     var spent = rows.filter(isExpense).reduce(function (sum, row) { return sum + row.amount; }, 0);
     var got = rows.filter(isIncome).reduce(function (sum, row) { return sum + row.amount; }, 0);
     var plan = plannedForDay(selected);
-    var label = selected.split("-").reverse().join(".");
+    var label = fmtDate(selected);
 
     var parts = [];
     parts.push('<div class="cal-day-head"><strong>' + esc(label) + '</strong>' +
@@ -1741,17 +1778,63 @@
     if (!reserve || !savings) return;
     var a = allowance();
     var s = settings();
+
+    // Резерв — це план на тиждень, а не окремий рахунок. Тому поруч завжди
+    // видно, скільки з нього вже пішло: інакше «2 000 ₴» читалось би як
+    // гроші, що десь лежать.
     reserve.textContent = fmt(s.weekReserve || 0);
-    // Запланований резерв і те, що з нього вже витрачено, — різні числа,
-    // тож показуємо обидва, а не одне «підсумкове».
     document.getElementById("pocketReserveSub").textContent = (s.weekReserve || 0)
       ? "витрачено " + fmtShort(a.reserveSpent) + " · лишилось " + fmtShort(Math.max(0, a.reserveLeft))
-      : "не заданий — задайте у «Мій план»";
+      : "не заданий — задайте нижче у «Мій план»";
+
+    // Заощадження — уже зафіксовані переноси минулих місяців. Поточний
+    // місяць ще не закритий, тож його прогноз показуємо окремим рядком і
+    // до суми не додаємо.
     savings.textContent = fmt(totalNavar());
     var history = navarHistory();
-    document.getElementById("pocketSavingsSub").textContent = history.length
-      ? "перенесено місяців: " + history.length
-      : "переносів ще не було";
+    var projected = monthProjectedCarry(monthKey(todayISO()));
+    var parts = [];
+    parts.push(history.length ? "перенесено місяців: " + history.length : "переносів ще не було");
+    if (projected > 0) parts.push("цього місяця йде " + fmtShort(projected));
+    document.getElementById("pocketSavingsSub").textContent = parts.join(" · ");
+
+    renderWeekSplit();
+  }
+
+  // Денний розподіл має бути видно як розподіл, а не як сім окремих полів:
+  // скільки розкладено, скільки лишилось до тижневого бюджета, де перебір.
+  function renderWeekSplit() {
+    var box = document.getElementById("weekSplit");
+    if (!box) return;
+    var s = settings();
+    var days = normalizeWeekDaily(s.weekDaily);
+    var planned = sumWeekDaily(days);
+    var budget = Math.max(0, round2(s.weekBudget));
+    var reserve = Math.max(0, round2(s.weekReserve));
+    var gap = round2(budget - (planned + reserve));
+    var max = Math.max.apply(null, days.concat([1]));
+
+    var status;
+    var tone;
+    if (!budget) { status = "Тижневий бюджет ще не заданий"; tone = "neutral"; }
+    else if (gap > 0) { status = "Не розкладено " + fmtShort(gap); tone = "warn"; }
+    else if (gap < 0) { status = "Перебір на " + fmtShort(Math.abs(gap)); tone = "over"; }
+    else { status = "Розкладено повністю"; tone = "ok"; }
+
+    box.dataset.tone = tone;
+    box.innerHTML =
+      '<div class="week-split-head">' +
+      '<span class="week-split-sum money">' + esc(fmtShort(planned)) + '</span>' +
+      '<span class="week-split-of">по днях' + (budget ? " з " + esc(fmtShort(budget)) : "") + '</span>' +
+      '</div>' +
+      '<div class="week-split-bars">' + days.map(function (value, index) {
+        var height = Math.max(4, Math.round((value / max) * 100));
+        return '<span class="week-split-bar" title="' + esc(WEEKDAY_SHORT[index] + " " + fmtShort(value)) + '">' +
+          '<i style="height:' + height + '%"></i>' +
+          '<b>' + esc(WEEKDAY_SHORT[index]) + '</b></span>';
+      }).join("") + '</div>' +
+      '<div class="week-split-status">' + esc(status) +
+      (reserve ? ' · резерв ' + esc(fmtShort(reserve)) : '') + '</div>';
   }
 
   /* ========================= помічник Roo ========================= */
@@ -4196,6 +4279,29 @@
 
     var cabinetOpen = document.getElementById("cabinetOpen");
     if (cabinetOpen) cabinetOpen.addEventListener("click", function () { goTo("cabinet"); });
+
+    // Розкладати тижневий бюджет по семи полях руками — це арифметика в
+    // голові щоразу, коли міняється сума. Кнопка робить це за один дотик,
+    // а копійки округлення віддає неділі, щоб сума збіглася точно.
+    var spreadWeek = document.getElementById("spreadWeekEven");
+    if (spreadWeek) spreadWeek.addEventListener("click", function () {
+      var s = settings();
+      var pool = round2(Math.max(0, s.weekBudget) - Math.max(0, s.weekReserve));
+      if (pool <= 0) {
+        showError("Тиждень", "Спершу задайте тижневий бюджет, більший за резерв.");
+        return;
+      }
+      var perDay = round2(pool / 7);
+      var days = [perDay, perDay, perDay, perDay, perDay, perDay, round2(pool - perDay * 6)];
+      if (days[6] < 0) days[6] = 0;
+      saveSettings({ weekDaily: days });
+      renderAll();
+    });
+    var clearWeek = document.getElementById("clearWeekDays");
+    if (clearWeek) clearWeek.addEventListener("click", function () {
+      saveSettings({ weekDaily: [0, 0, 0, 0, 0, 0, 0] });
+      renderAll();
+    });
 
     // Огляд: місяць або рік.
     function syncOverviewMode() {

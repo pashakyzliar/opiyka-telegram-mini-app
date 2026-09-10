@@ -1943,6 +1943,58 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
   .head-btn, .avatar-btn { width: 40px; height: 40px; }
 }
 
+/* ---- Кишені ---- */
+
+.pocket-summary {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--roo-surface-2);
+  color: var(--ink);
+  font: 600 13px/1.35 var(--font-text);
+}
+
+/* Розподіл тижня: стовпчики дають форму розкладу з одного погляду,
+   а підпис під ними називає стан словами, не лише кольором. */
+.week-split { margin-bottom: 12px; }
+.week-split-head { display: flex; align-items: baseline; gap: 8px; }
+.week-split-sum {
+  font: 700 22px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+.week-split-of { color: var(--ink-soft); font-size: var(--text-small); }
+.week-split-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  align-items: end;
+  height: 62px;
+  margin: 10px 0 8px;
+}
+.week-split-bar { display: grid; align-content: end; justify-items: center; gap: 4px; height: 100%; }
+.week-split-bar i {
+  display: block;
+  width: 100%;
+  min-height: 4px;
+  border-radius: 6px 6px 3px 3px;
+  background: var(--roo-purple-soft);
+}
+.week-split-bar b { font: 600 10px/1 var(--font-text); color: var(--ink-muted); }
+.week-split-status { font: 600 13px/1.35 var(--font-text); color: var(--ink-soft); }
+.week-split[data-tone="warn"] .week-split-status { color: var(--roo-warning); }
+.week-split[data-tone="over"] .week-split-status { color: var(--roo-negative); }
+.week-split[data-tone="over"] .week-split-bar i { background: var(--roo-apricot-deep); }
+.week-split[data-tone="ok"] .week-split-status { color: var(--roo-positive); }
+.week-split[data-tone="ok"] .week-split-bar i { background: var(--roo-purple); }
+
+.debt-row.overdue .debt-due { color: var(--roo-negative); font-weight: 600; }
+.debt-row.settled { opacity: .55; }
+.debt-due { font-size: var(--text-small); color: var(--ink-soft); }
+
+#view-pockets .panel { border-radius: var(--radius-pocket); }
+.bento-pockets .cell { justify-content: space-between; }
+
 /* Зручності з кабінету. Збільшення тексту не чіпає великі суми —
    вони й так адаптуються до ширини екрана. */
 body.text-large {

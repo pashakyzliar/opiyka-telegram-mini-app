@@ -312,6 +312,7 @@
           <input type="text" id="weekBudget" inputmode="decimal" placeholder="10000" /></label>
         <label class="setting-row"><span>Резерв на тиждень</span>
           <input type="text" id="weekReserve" inputmode="decimal" placeholder="2000" /></label>
+        <div class="week-split" id="weekSplit" aria-live="polite"></div>
         <div class="week-grid">
           <label><span>Пн</span><input type="text" inputmode="decimal" data-weekday="0" placeholder="0" /></label>
           <label><span>Вт</span><input type="text" inputmode="decimal" data-weekday="1" placeholder="0" /></label>
@@ -320,6 +321,10 @@
           <label><span>Пт</span><input type="text" inputmode="decimal" data-weekday="4" placeholder="0" /></label>
           <label><span>Сб</span><input type="text" inputmode="decimal" data-weekday="5" placeholder="0" /></label>
           <label><span>Нд</span><input type="text" inputmode="decimal" data-weekday="6" placeholder="0" /></label>
+        </div>
+        <div class="setting-actions">
+          <button class="btn" type="button" id="spreadWeekEven">Розкласти порівну</button>
+          <button class="btn" type="button" id="clearWeekDays">Обнулити дні</button>
         </div>
         <div class="setting-note" id="weekPlanStatus"></div>
       </section>
@@ -333,6 +338,7 @@
     <div id="pockets-payments" hidden>
       <section class="panel" id="plan-recurring" data-help-key="recurring">
         <div class="panel-head"><h2>Регулярні</h2><button class="btn" type="button" id="addRecBtn">+ платіж</button></div>
+        <div class="pocket-summary" id="recSummary"></div>
         <form id="recForm" class="stack-form" hidden>
           <input type="text" name="name" placeholder="Назва" maxlength="60" required />
           <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
@@ -347,6 +353,7 @@
       <section class="panel" id="plan-amortize" data-help-key="amortization">
         <div class="panel-head"><h2>Великі витрати</h2><button class="btn" type="button" id="addAmBtn">+ витрата</button></div>
         <p class="panel-note">Рідкі великі суми — страховка, шини, техогляд. Застосунок ділить їх на місяці, щоб вони не били по одному місяцю.</p>
+        <div class="pocket-summary" id="amSummary"></div>
         <form id="amForm" class="stack-form" hidden>
           <input type="text" name="name" placeholder="Напр. страховка" maxlength="60" required />
           <input type="text" name="amount" inputmode="decimal" placeholder="Сума, ₴" required />
@@ -361,6 +368,7 @@
       <section class="panel" id="plan-debts" data-help-key="debts">
         <div class="panel-head"><h2>Борги</h2><button class="btn" type="button" id="addDebtBtn">+ борг</button></div>
         <p class="panel-note">Окремо від витрат — у статистику не йдуть.</p>
+        <div class="pocket-summary" id="debtSummaryBox"></div>
         <form id="debtForm" class="stack-form" hidden>
           <select name="direction" aria-label="Напрям">
             <option value="lent">Позичив я</option>
