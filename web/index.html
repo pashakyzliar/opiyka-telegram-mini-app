@@ -3,11 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#efe9d9">
-  <title>WALLET</title>
+  <meta name="theme-color" content="#F0EBFF">
+  <title>Walroo</title>
+  <link rel="icon" href="./assets/roo.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bad+Script&family=Oswald:wght@400;500;600;700&family=Rubik+Mono+One&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext">
+  <!-- Unbounded — бренд і великі показники, Onest — увесь інтерфейсний текст.
+       Обидва мають кирилицю; subset задано явно, щоб не тягнути зайві набори. -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Onest:wght@400;500;600;700&display=swap&subset=cyrillic,cyrillic-ext,latin,latin-ext">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
     window.__appAssetVersion = String(Date.now());
@@ -16,7 +19,7 @@
       return path + join + "v=" + encodeURIComponent(window.__appAssetVersion);
     };
     window.__showBootError = function () {
-      document.body.innerHTML = "<main style=\"padding:24px;font:16px system-ui\">Копійка не завантажилась. Перезапусти Mini App.</main>";
+      document.body.innerHTML = "<main style=\"padding:24px;font:16px system-ui;color:#301948;background:#F0EBFF\">Walroo не завантажився. Перезапустіть Mini App.</main>";
     };
     (function loadAppStyle() {
       var el = document.createElement("link");

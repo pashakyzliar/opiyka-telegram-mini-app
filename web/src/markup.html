@@ -3,8 +3,8 @@
 
 <div class="pin-gate" id="pinGate" hidden>
   <form class="pin-box" id="pinForm">
-    <h2 class="engraved brand-graffiti">WALLET</h2>
-    <p class="pin-note" id="pinNote">Введи PIN</p>
+    <h2 class="engraved brand-graffiti">walroo</h2>
+    <p class="pin-note" id="pinNote">Введіть PIN</p>
     <input type="password" id="pinInput" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="••••" />
     <button class="btn-primary" type="submit">Відкрити</button>
     <p class="pin-warn">PIN ховає екран від чужого погляду. Дані він не шифрує.</p>
@@ -67,9 +67,13 @@
 
 <div class="app" id="app">
   <header class="topbar dashboard-header" data-help-key="dashboard-date">
-    <div class="dashboard-brand" aria-label="Wallet">
-      <span class="wallet-mini-mark">W</span>
-      <span>WALLET</span>
+    <!-- Поки файлів немає, onerror лишає літерний знак: зображення, що не
+         завантажилось, не повинно висіти зламаною іконкою в шапці. -->
+    <div class="dashboard-brand" aria-label="Walroo">
+      <span class="wallet-mini-mark" id="brandMark">
+        <img src="./assets/roo.svg" alt="" width="22" height="22" onerror="this.remove()">
+      </span>
+      <span class="brand-word">walroo</span>
     </div>
     <div class="dashboard-date" aria-live="polite">
       <span class="dashboard-weekday" id="dashboardWeekday"></span>
@@ -365,7 +369,7 @@
 
   <footer class="note">
     Ваші дані бачите тільки ви.
-    <span class="signature">WALLET</span>
+    <span class="signature">walroo</span>
   </footer>
 </div>
 
@@ -375,7 +379,7 @@
   <button class="viewtab" data-view="year" role="tab" aria-controls="view-year" aria-selected="false">Рік</button>
   <button class="viewtab" data-view="cabinet" role="tab" aria-controls="view-cabinet" aria-selected="false">Кабінет</button>
   <button class="viewtab" data-view="settings" role="tab" aria-controls="view-settings" aria-selected="false">Налаштування</button>
-  <span class="wallet-dock-mark" aria-label="Wallet"><span>W</span></span>
+  <span class="wallet-dock-mark" aria-label="Walroo"><img src="./assets/roo.svg" alt="" width="30" height="30" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'W'}))"></span>
 </nav>
 
 <div class="expense-icon-picker" id="expenseIconPicker" role="dialog" aria-label="Емодзі для витрат" hidden></div>

@@ -1017,38 +1017,95 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .expense-icon-clear { margin-top: 9px; width: 100%; min-height: 38px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel); color: var(--ink-soft); font: 500 12px system-ui, sans-serif; cursor: pointer; }
 
 /* ===================================================================
-   WALLET 2026: спокійний темно-синій financial dashboard.
-   Статичні поверхні й прямі оновлення даних: без "святкування" суми.
+   WALROO — Roo Pop.
+   Єдине джерело дизайн-токенів. Стиль свідомо однотемний: світла лаванда
+   в будь-якій системній темі, тому всі чотири селектори нижче задають той
+   самий набір. Історичні імена змінних (--paper, --gold, --panel) лишені
+   як псевдоніми — вони живлять увесь раніше написаний інтерфейс, тож
+   палітра міняється в одному місці, без правок у сотнях правил.
    =================================================================== */
 :root, :root:not([data-theme="light"]), :root[data-theme="light"], :root[data-theme="dark"] {
-  color-scheme: dark;
-  --paper: #071323;
-  --paper-2: #0a192c;
-  --panel: #0d2038;
-  --panel-2: #102946;
-  --grain: rgba(139, 181, 255, .025);
-  --ink: #f4f8ff;
-  --ink-soft: #c1d0e6;
-  --ink-muted: #8094af;
-  --hair: rgba(174, 207, 255, .13);
-  --hair-strong: rgba(174, 207, 255, .24);
-  --gold: #7daaff;
-  --gold-hi: #d8e7ff;
-  --gold-lo: #3a6fca;
-  --foil: linear-gradient(110deg, #76a8ff 0%, #e8f1ff 48%, #7daaff 100%);
-  --positive: #5dd6a2;
-  --negative: #ff7b8b;
-  --guilloche: rgba(111, 162, 255, .08);
-  --shadow: 0 18px 48px rgba(0, 5, 18, .35);
-  --radius: 18px;
+  color-scheme: light;
+
+  /* --- фірмові кольори --- */
+  --roo-lavender:     #F0EBFF;
+  --roo-lavender-2:   #E6DEFC;
+  --roo-surface:      #FAF7FF;
+  --roo-surface-2:    #F3EEFF;
+  --roo-purple:       #6435BA;
+  --roo-purple-hi:    #7A4FD0;
+  --roo-purple-lo:    #4A2490;
+  --roo-purple-soft:  #D7C1FC;
+  --roo-apricot:      #FFC495;
+  --roo-apricot-deep: #F5A867;
+  --roo-plum:         #301948;
+  --roo-plum-soft:    #665377;
+  --roo-divider:      #D4C5E9;
+
+  /* --- семантика --- */
+  /* Обидва відтінки перевірені на лаванді: 5.61 і 5.81 до одиниці. */
+  --roo-negative:     #B3261E;
+  --roo-positive:     #146848;
+  --roo-warning:      #8A5A12;
+
+  /* --- псевдоніми для наявного коду --- */
+  --paper:        var(--roo-lavender);
+  --paper-2:      var(--roo-lavender-2);
+  --panel:        var(--roo-surface);
+  --panel-2:      var(--roo-surface-2);
+  --grain:        rgba(48, 25, 72, .02);
+  --ink:          var(--roo-plum);
+  --ink-soft:     var(--roo-plum-soft);
+  --ink-muted:    #7C6A90;
+  --hair:         rgba(48, 25, 72, .10);
+  --hair-strong:  var(--roo-divider);
+  --gold:         var(--roo-purple);
+  --gold-hi:      var(--roo-purple-hi);
+  --gold-lo:      var(--roo-purple-lo);
+  --foil:         linear-gradient(110deg, var(--roo-purple) 0%, var(--roo-purple-hi) 52%, var(--roo-purple) 100%);
+  --positive:     var(--roo-positive);
+  --negative:     var(--roo-negative);
+  --guilloche:    rgba(100, 53, 186, .06);
+  --shadow:       0 14px 34px rgba(48, 25, 72, .10);
+  --shadow-soft:  0 6px 18px rgba(48, 25, 72, .07);
+
+  /* --- радіуси: мотив кишені, асиметричні кути --- */
+  --radius:        22px;
+  --radius-sm:     14px;
+  --radius-lg:     28px;
+  --radius-pocket: 28px 28px 34px 34px;
+
+  /* --- типографіка --- */
+  --font-display: "Unbounded", "Segoe UI", system-ui, sans-serif;
+  --font-text:    "Onest", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --text-body:    16px;
+  --text-small:   13px;
+  --text-micro:   12px;
+
+  /* --- відступи --- */
+  --gap-xs: 6px;
+  --gap-sm: 10px;
+  --gap:    14px;
+  --gap-lg: 20px;
+
+  /* Перемикач «Приховати суми» в кабінеті. */
+  --amount-blur: 0px;
 }
+
+/* Правило контрасту, зашите в токени: на абрикосовому й світло-фіолетовому
+   другорядний текст не проходить AA (4.43 і 4.21), тому там лише сливовий. */
+.on-apricot, .on-purple-soft { color: var(--roo-plum); }
+.on-apricot .cell-sub, .on-apricot .panel-note,
+.on-purple-soft .cell-sub, .on-purple-soft .panel-note { color: var(--roo-plum); opacity: .72; }
+
+body { font-family: var(--font-text); font-size: var(--text-body); }
 
 .bg-vignette {
   position: fixed;
   background:
-    radial-gradient(100% 58% at 50% -6%, rgba(55, 112, 214, .28), transparent 64%),
-    radial-gradient(70% 45% at 100% 22%, rgba(26, 104, 165, .16), transparent 68%),
-    linear-gradient(180deg, #0a1b31 0%, var(--paper) 38%, #06101e 100%);
+    radial-gradient(110% 60% at 50% -8%, rgba(215, 193, 252, .55), transparent 62%),
+    radial-gradient(80% 46% at 100% 14%, rgba(255, 196, 149, .28), transparent 66%),
+    var(--roo-lavender);
 }
 .bg-guilloche, .ticker { display: none; }
 .app { max-width: 760px; padding: 12px 14px calc(162px + env(safe-area-inset-bottom)); }
@@ -1494,3 +1551,170 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 }
 .import-picker { display: flex; flex-direction: column; gap: 10px; }
 .import-picker .btn-primary { min-height: 50px; }
+
+/* ===================================================================
+   ROO POP — типографіка й поверхні.
+   Блок іде останнім свідомо: він перекриває гравіювання, Oswald і
+   суцільний верхній регістр зі старого оформлення, не змушуючи правити
+   двадцять розкиданих правил. Наступні етапи переписують компоненти,
+   і тоді цей блок скорочується.
+   =================================================================== */
+
+h1, h2, h3,
+.cell-label, .panel-note, .btn, .btn-primary, .viewtab, th,
+.engraved, .denomination, .signature, .tagline, .empty-note {
+  font-family: var(--font-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+h1, h2, h3, .engraved, .denomination {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -.015em;
+  color: var(--ink);
+}
+h2 { font-size: clamp(19px, 5vw, 24px); line-height: 1.2; }
+h3 { font-size: 17px; line-height: 1.3; }
+
+/* Фольга й контур були зроблені під темний фон: на лаванді вони
+   перетворювали суму на нечитабельну пляму. */
+.engraved, .denomination, .cell-value.money {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: var(--ink);
+  -webkit-text-stroke: 0;
+  filter: none;
+}
+
+/* Великі суми: Unbounded, табличні цифри, стиснення під довге число. */
+.cell-value, .cell-value.money, .money, .num, .answer-sum,
+.donut-total, .week-day-money, .preset b {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -.02em;
+}
+.cell-value.money { font-size: clamp(22px, 6.4vw, 30px); }
+
+.cell-label, .panel-note {
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.empty-note, .setting-note, .import-note {
+  font-family: var(--font-text);
+  font-size: var(--text-small);
+  color: var(--ink-soft);
+}
+.dashboard-date strong { font-family: var(--font-display); letter-spacing: -.03em; }
+.trend-label { font-family: var(--font-text); letter-spacing: .04em; }
+.wallet-dock-mark > span,
+.wallet-mini-mark { font-family: var(--font-display); transform: none; letter-spacing: -.04em; }
+
+input, select, textarea, button { font-family: var(--font-text); }
+
+/* Тіні на світлому фоні мають бути мʼякими, інакше все виглядає брудним. */
+.panel, .cell, .dashboard-header, .wallet-dock,
+.onboarding-box, .import-box, .block-help-popover, .expense-icon-picker {
+  box-shadow: var(--shadow-soft);
+}
+.onboarding-box, .import-box { box-shadow: var(--shadow); }
+.onboarding { background: rgba(48, 25, 72, .55); }
+.import-sheet { background: rgba(48, 25, 72, .45); }
+.onboarding-dot { background: var(--roo-divider); }
+.block-help-popover, .expense-icon-picker { background: var(--roo-surface); }
+.block-help-button { background: var(--roo-surface); border-color: var(--roo-divider); color: var(--ink-soft); }
+.wallet-dock .viewtab { background: var(--roo-surface); color: var(--ink-soft); border-color: var(--roo-divider); }
+.wallet-dock .viewtab.active { background: var(--roo-purple); color: #fff; border-color: var(--roo-purple); }
+.wallet-dock-mark { background: var(--roo-purple); border-color: var(--roo-surface); color: #fff; }
+.wallet-mini-mark { background: var(--roo-purple); color: #fff; }
+.wallet-mini-mark img, .wallet-dock-mark img { display: block; width: 68%; height: 68%; object-fit: contain; }
+.brand-word {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: -.03em;
+  text-transform: lowercase;
+  color: var(--ink);
+}
+.dashboard-brand { gap: 7px; letter-spacing: 0; }
+
+/* Два місця, де колір був зашитий повз токени й лишався темним. */
+.month-switcher .month-nav {
+  border-color: var(--roo-divider);
+  background: var(--roo-surface);
+}
+.month-switcher-label { color: var(--ink-soft); letter-spacing: .1em; }
+.month-switcher .month-label { font-weight: 600; letter-spacing: .02em; text-transform: none; font-size: 13px; }
+.wallet-dock {
+  border-color: var(--roo-divider);
+  background: var(--roo-surface);
+  box-shadow: 0 -6px 26px rgba(48, 25, 72, .12);
+}
+.wallet-dock .viewtab {
+  background: var(--roo-surface-2);
+  color: var(--ink-soft);
+  border-color: var(--roo-divider);
+  font-family: var(--font-text);
+  font-weight: 600;
+}
+.panel, .cell {
+  background: var(--panel);
+  border-color: var(--hair);
+  box-shadow: var(--shadow-soft);
+}
+.table-wrap { background: var(--panel-2); border-color: var(--roo-divider); }
+.icon-btn { color: var(--ink-soft); }
+.btn-primary {
+  background: var(--roo-purple);
+  color: #fff;
+  border: 0;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.btn {
+  background: var(--roo-surface);
+  color: var(--ink);
+  border: 1px solid var(--roo-divider);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+input, select, textarea {
+  background: var(--roo-surface-2);
+  border-color: var(--roo-divider);
+  color: var(--ink);
+}
+input::placeholder, textarea::placeholder { color: var(--ink-muted); }
+
+/* Мотив кишені: заокруглення знизу помітно більші за верхні. */
+.pocket { border-radius: var(--radius-pocket); }
+.pocket-primary {
+  background: var(--roo-purple);
+  color: #fff;
+  border: 0;
+}
+.pocket-primary .cell-label,
+.pocket-primary .cell-sub,
+.pocket-primary .panel-note { color: var(--roo-purple-soft); }
+.pocket-primary .cell-value,
+.pocket-primary .cell-value.money { color: #fff; }
+.pocket-soft { background: var(--roo-purple-soft); color: var(--roo-plum); border: 0; }
+.pocket-accent { background: var(--roo-apricot); color: var(--roo-plum); border: 0; }
+.pocket-soft .cell-label, .pocket-accent .cell-label,
+.pocket-soft .cell-sub, .pocket-accent .cell-sub { color: var(--roo-plum); opacity: .74; }
+
+/* Приховування сум із кабінету. */
+.amounts-hidden .money,
+.amounts-hidden .cell-value {
+  filter: blur(7px);
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}

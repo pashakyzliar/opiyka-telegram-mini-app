@@ -24,7 +24,14 @@ const MIME = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml",
   ".woff2": "font/woff2",
-  ".ico": "image/x-icon"
+  ".woff": "font/woff",
+  ".ico": "image/x-icon",
+  // Растрові формати бракували, хоч правило кешування їх уже згадувало:
+  // PNG-логотип віддавався як octet-stream і не показувався.
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp"
 };
 
 function requestId() {
