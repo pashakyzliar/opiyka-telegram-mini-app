@@ -227,4 +227,82 @@ async function askJson(prompt) {
   return { result: parsed, usage: payload.usage || null, model: payload.model || AI_MODEL };
 }
 
-module.exports = { configured, reserve, quotaFor, askJson, extractJson, AI_MODEL };
+/* --------------------------- виклик з інструментами --------------------------- */
+
+/**
+ * Той самий шлюз, але з нативним tool-calling: модель формулює намір, а що
+ * саме виконати — вирішує сервер. Ніяких «розберіть цей JSON руками»:
+ * параметри приходять за оголошеною схемою й далі перевіряються ще раз.
+ *
+ * messages — уже зібрана історія (system + user + tool-відповіді).
+ * tools — масив описів у форматі OpenAI.
+ */
+async function chatWithTools(messages, tools, options) {
+  if (!configured()) throw fail("not_granted", "AI не налаштовано на сервері.");
+  const opts = options || {};
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+  const headers = { "Content-Type": "application/json" };
+  if (AI_KEY) headers.Authorization = "Bearer " + AI_KEY;
+
+  const requestBody = {
+    model: AI_MODEL,
+    stream: false,
+    temperature: 0,
+    max_tokens: opts.maxTokens || AI_MAX_TOKENS,
+    messages: messages
+  };
+  if (tools && tools.length) {
+    requestBody.tools = tools;
+    requestBody.tool_choice = opts.toolChoice || "auto";
+  }
+  if (AI_REASONING_EFFORT && AI_REASONING_EFFORT !== "off") {
+    requestBody.reasoning_effort = AI_REASONING_EFFORT;
+  }
+
+  let response;
+  let text;
+  try {
+    response = await fetch(AI_BASE_URL + "/chat/completions", {
+      method: "POST",
+      headers: headers,
+      signal: controller.signal,
+      body: JSON.stringify(requestBody)
+    });
+    text = await response.text();
+  } catch (error) {
+    if (error.name === "AbortError") throw fail("timeout", "Провайдер не відповів вчасно.");
+    throw fail("provider_unreachable", "Не вдалось достукатись до провайдера: " + error.message);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    if (response.status === 429) throw fail("rate_limited", "Провайдер обмежив запити.");
+    if (response.status === 401 || response.status === 403) throw fail("not_granted", "Провайдер відхилив авторизацію.");
+    // Модель без підтримки tools відповідає 400 саме на це поле. Кажемо
+    // прямо, що робити, замість глухого «провайдер відповів 400».
+    if (response.status === 400 && /tool|function/i.test(text || "")) {
+      throw fail("tools_unsupported", "Обрана модель не підтримує виклик інструментів. Змініть AI_MODEL.");
+    }
+    throw fail("provider_error", "Провайдер відповів " + response.status + ".");
+  }
+
+  let payload;
+  try { payload = JSON.parse(text); }
+  catch (e) { throw fail("bad_response", "Відповідь провайдера не є JSON."); }
+
+  const choice = payload && Array.isArray(payload.choices) ? payload.choices[0] : null;
+  const message = (choice && choice.message) || {};
+  return {
+    message: message,
+    toolCalls: Array.isArray(message.tool_calls) ? message.tool_calls : [],
+    content: typeof message.content === "string" ? message.content : "",
+    usage: payload.usage || null,
+    model: payload.model || AI_MODEL
+  };
+}
+
+module.exports = { configured, reserve, quotaFor, askJson, chatWithTools, extractJson, AI_MODEL };

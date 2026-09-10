@@ -8,6 +8,7 @@ const path = require("node:path");
 const config = require("./config");
 const ai = require("./ai");
 const botAi = require("./bot-ai");
+const roo = require("./roo");
 const { dayAllowance } = require("./allowance");
 const { authenticatedUser, pseudonymizeTelegramId } = require("./auth/telegram");
 const { json, errorJson, corsHeaders, bodyJson } = require("./lib/http");
@@ -489,6 +490,39 @@ async function api(req, res, pathname) {
   }
 
   const reqId = requestId();
+
+  if (req.method === "POST" && pathname === "/api/roo/chat") {
+    if (!ai.configured()) return errorJson(res, 503, "not_granted", "AI на сервері не налаштовано.");
+    const payload = await bodyJson(req, 32 * 1024);
+    const message = String(payload && payload.message || "").trim();
+    if (!message) return errorJson(res, 400, "bad_request", "Порожнє повідомлення.");
+    if (message.length > 1000) return errorJson(res, 400, "bad_request", "Повідомлення задовге.");
+    // Квота спільна з рештою AI: помічник не має бути дірою в обмеженнях.
+    const gate = ai.reserve(userQuotaKey(auth));
+    if (!gate.ok) return errorJson(res, 429, gate.code, gate.message);
+    // Стан читаємо в тому ж контексті користувача, що й решта API, тож
+    // ізоляція між акаунтами тут та сама, а не окрема.
+    const account = await withUserContext(auth.telegramKey, false, (client, userId) =>
+      accountService.getState(client, userId));
+    try {
+      const result = await roo.converse(ai, account, {
+        message: message,
+        history: payload && payload.history,
+        timezoneOffset: payload && payload.timezoneOffset
+      });
+      return json(res, 200, result);
+    } catch (error) {
+      console.error("Roo:", error && error.code, error && error.message);
+      const code = error.code || "provider_error";
+      const status = code === "not_granted" ? 503 : code === "rate_limited" ? 429 : 502;
+      const reply = code === "tools_unsupported"
+        ? "Обрана модель не підтримує інструменти. Змініть AI_MODEL у налаштуваннях сервера."
+        : code === "timeout"
+          ? "Помічник не відповів вчасно. Спробуйте ще раз."
+          : error.message || "Помічник тимчасово недоступний.";
+      return errorJson(res, status, code, reply);
+    }
+  }
 
   if (req.method === "GET" && pathname === "/api/quick/token") {
     const active = await withUserContext(auth.telegramKey, false, (client, userId) => accountService.quickTokenStatus(client, userId));

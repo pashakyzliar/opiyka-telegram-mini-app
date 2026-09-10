@@ -1943,6 +1943,47 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
   .head-btn, .avatar-btn { width: 40px; height: 40px; }
 }
 
+/* ---- Помічник Roo ---- */
+
+.roo-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 86%;
+  padding: 12px 14px;
+  border-radius: 20px;
+  font: 400 15px/1.45 var(--font-text);
+}
+.roo-me {
+  align-self: flex-end;
+  background: var(--roo-purple);
+  color: #fff;
+  border-bottom-right-radius: 8px;
+}
+.roo-bot {
+  align-self: flex-start;
+  background: var(--roo-surface);
+  border: 1px solid var(--roo-divider);
+  color: var(--ink);
+  border-bottom-left-radius: 8px;
+}
+.roo-error {
+  align-self: flex-start;
+  max-width: 100%;
+  background: var(--roo-surface);
+  border: 1px solid var(--roo-negative);
+  color: var(--roo-negative);
+}
+.roo-error .btn { align-self: flex-start; min-height: 40px; }
+/* Видно, у які дані Roo реально заглядав — це не декор, а перевірюваність. */
+.roo-used {
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.roo-thread { padding-bottom: 4px; }
+.roo-composer .btn-primary:disabled { opacity: .5; cursor: progress; }
+
 /* ---- Кишені ---- */
 
 .pocket-summary {

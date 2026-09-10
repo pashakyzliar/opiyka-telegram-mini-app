@@ -1839,6 +1839,137 @@
 
   /* ========================= помічник Roo ========================= */
 
+  var ROO_EXAMPLES = [
+    "Скільки я витратив цього місяця?",
+    "Чому сьогодні можна витратити 0 грн?",
+    "Покажи операції за вчора",
+    "Скільки лишилось на кафе до ліміту?",
+    "Порівняй цей місяць із минулим",
+    "Відкрий календар"
+  ];
+  var ROO_STORAGE = "walroo_roo_thread";
+  var rooThreadRows = [];
+  var rooBusy = false;
+
+  function rooLoadThread() {
+    try {
+      var raw = JSON.parse(localStorage.getItem(ROO_STORAGE) || "[]");
+      rooThreadRows = Array.isArray(raw) ? raw.slice(-30) : [];
+    } catch (e) { rooThreadRows = []; }
+  }
+  function rooSaveThread() {
+    // Історія чату — не фінансові дані, тож живе окремо й локально.
+    // Її очищення не чіпає жодної операції.
+    try { localStorage.setItem(ROO_STORAGE, JSON.stringify(rooThreadRows.slice(-30))); } catch (e) {}
+  }
+
+  function rooRenderThread() {
+    var thread = document.getElementById("rooThread");
+    if (!thread) return;
+    if (!rooThreadRows.length) {
+      thread.innerHTML = '<div class="empty-note">Запитайте про свої гроші — Roo подивиться реальні записи.</div>';
+      return;
+    }
+    thread.innerHTML = rooThreadRows.map(function (row) {
+      if (row.role === "error") {
+        return '<div class="roo-msg roo-error"><span>' + esc(row.content) + '</span>' +
+          '<button class="btn" type="button" data-roo-retry="' + esc(row.retry || "") + '">Спробувати ще раз</button></div>';
+      }
+      var cls = row.role === "user" ? "roo-msg roo-me" : "roo-msg roo-bot";
+      var used = row.used && row.used.length
+        ? '<span class="roo-used">' + esc(rooToolLabel(row.used)) + '</span>' : "";
+      return '<div class="' + cls + '"><span>' + esc(row.content) + '</span>' + used + '</div>';
+    }).join("");
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  var ROO_TOOL_LABELS = {
+    get_overview: "підсумки",
+    get_daily_plan: "денний план",
+    find_transactions: "пошук операцій",
+    get_limits: "ліміти",
+    get_pockets: "кишені",
+    compare_periods: "порівняння місяців",
+    open_screen: "перехід"
+  };
+  function rooToolLabel(used) {
+    var names = [];
+    used.forEach(function (name) {
+      var label = ROO_TOOL_LABELS[name] || name;
+      if (names.indexOf(label) < 0) names.push(label);
+    });
+    return "дивився: " + names.join(", ");
+  }
+
+  function rooSetBusy(on) {
+    rooBusy = on;
+    var send = document.getElementById("rooSend");
+    var status = document.getElementById("rooState");
+    if (send) send.disabled = on;
+    if (status && on) status.textContent = "Roo дивиться ваші записи…";
+    else if (status) status.textContent = "Питайте про свої гроші.";
+  }
+
+  function rooAsk(text) {
+    var message = String(text || "").trim();
+    if (!message || rooBusy) return;
+    var request = window.KOPIYKA_API_REQUEST;
+    if (!request) { showError("Roo", "Помічник доступний лише з Telegram."); return; }
+
+    rooThreadRows.push({ role: "user", content: message });
+    rooRenderThread();
+    rooSaveThread();
+    rooSetBusy(true);
+
+    var history = rooThreadRows
+      .filter(function (row) { return row.role === "user" || row.role === "assistant"; })
+      .slice(-10, -1)
+      .map(function (row) { return { role: row.role, content: row.content }; });
+
+    request("/api/roo/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        message: message,
+        history: history,
+        // Часовий пояс рахує клієнт, «сьогодні» — сервер на його основі.
+        timezoneOffset: -new Date().getTimezoneOffset()
+      })
+    }).then(function (data) {
+      rooSetBusy(false);
+      rooThreadRows.push({
+        role: "assistant",
+        content: (data && data.reply) || "Порожня відповідь.",
+        used: (data && data.used) || []
+      });
+      rooRenderThread();
+      rooSaveThread();
+      if (data && data.navigateTo && window.__walrooNavigate) {
+        window.__walrooNavigate(data.navigateTo);
+      }
+      // Дані могли змінитись поки людина читала — оновлюємо показники.
+      renderAll();
+    }).catch(function (error) {
+      rooSetBusy(false);
+      console.error("[Walroo] Roo:", error);
+      rooThreadRows.push({
+        role: "error",
+        content: rooErrorText(error),
+        retry: message
+      });
+      rooRenderThread();
+      rooSaveThread();
+    });
+  }
+
+  function rooErrorText(error) {
+    var code = error && error.code;
+    if (code === "not_granted") return "AI на сервері не налаштовано.";
+    if (code === "rate_limited") return "Ліміт запитів вичерпано. Спробуйте пізніше.";
+    if (code === "timeout") return "Помічник не відповів вчасно.";
+    if (code === "tools_unsupported") return "Модель на сервері не підтримує інструменти — потрібно змінити AI_MODEL.";
+    return (error && error.message) || "Не вдалося звʼязатися з помічником.";
+  }
+
   function renderRooScreen() {
     var status = document.getElementById("rooState");
     var suggest = document.getElementById("rooSuggest");
@@ -1847,7 +1978,7 @@
     if (!status || !suggest || !thread || !form) return;
     var ready = !!caps.sample;
     status.textContent = ready
-      ? "Питайте про свої гроші або диктуйте витрати."
+      ? "Питайте про свої гроші."
       : "AI на сервері не налаштовано — помічник поки недоступний.";
     form.hidden = !ready;
     suggest.hidden = !ready;
@@ -1859,16 +1990,53 @@
     }
     if (!thread.dataset.filled) {
       thread.dataset.filled = "1";
-      thread.innerHTML = '<div class="empty-note">Тут зʼявиться листування з Roo.</div>';
+      rooLoadThread();
     }
+    rooRenderThread();
   }
 
-  var ROO_EXAMPLES = [
-    "Запиши каву за 85 грн",
-    "Скільки витрачено на доставку цього місяця?",
-    "Чому сьогодні можна витратити 0 грн?",
-    "Покажи операції за вчора"
-  ];
+  function wireRoo() {
+    var form = document.getElementById("rooForm");
+    if (!form) return;
+    var input = document.getElementById("rooInput");
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var text = input.value;
+      input.value = "";
+      input.style.height = "";
+      rooAsk(text);
+    });
+    // Enter надсилає, Shift+Enter переносить рядок — як у месенджері.
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.dispatchEvent(new Event("submit", { cancelable: true }));
+      }
+    });
+    input.addEventListener("input", function () {
+      input.style.height = "auto";
+      input.style.height = Math.min(140, input.scrollHeight) + "px";
+    });
+    document.getElementById("rooSuggest").addEventListener("click", function (event) {
+      var chip = event.target.closest("[data-roo-example]");
+      if (chip) rooAsk(chip.dataset.rooExample);
+    });
+    document.getElementById("rooThread").addEventListener("click", function (event) {
+      var retry = event.target.closest("[data-roo-retry]");
+      if (!retry) return;
+      // Прибираємо картку помилки, щоб історія не заростала повторами.
+      rooThreadRows = rooThreadRows.filter(function (row) { return row.role !== "error"; });
+      rooAsk(retry.dataset.rooRetry);
+    });
+    document.getElementById("rooClear").addEventListener("click", function () {
+      confirmBox("Очистити листування з Roo? Фінансові записи залишаться на місці.").then(function (ok) {
+        if (!ok) return;
+        rooThreadRows = [];
+        rooSaveThread();
+        rooRenderThread();
+      });
+    });
+  }
 
   function renderSettings() {
     // Параметри бюджету живуть у «Кишенях», решта налаштувань — у кабінеті,
@@ -4135,6 +4303,7 @@
     wireBlockHelp();
     wireOnboarding();
     wireImportSheet();
+    wireRoo();
     setInterval(refreshCalendarDay, 60000);
     document.addEventListener("visibilitychange", function () {
       if (!document.hidden) refreshCalendarDay();
@@ -4260,11 +4429,10 @@
       tab.addEventListener("click", function () { goTo(tab.dataset.view); });
     });
 
-    // Переходи всередині екранів: «‹ Огляд», «Журнал», «Аналітика», ліміти.
-    document.addEventListener("click", function (event) {
-      var link = event.target.closest("[data-goto]");
-      if (!link) return;
-      var target = link.dataset.goto;
+    // Одна точка переходу для всього: кнопок «‹ Огляд», посилань в аналітиці,
+    // пунктів кабінету й відповідей Roo. «Ліміти» — не окремий екран, а місце
+    // всередині «Кишень», тому мають власну гілку.
+    function navigate(target) {
       if (target === "limits") {
         state.pocketTab = "plan";
         goTo("pockets", function () {
@@ -4274,7 +4442,23 @@
         });
         return;
       }
+      if (target === "calendar") {
+        state.overviewMode = "month";
+        goTo("overview", function () {
+          syncOverviewMode();
+          var el = document.getElementById("calendarPanel");
+          if (el) setTimeout(function () { el.scrollIntoView({ behavior: "smooth", block: "start" }); }, 0);
+        });
+        return;
+      }
       goTo(target);
+    }
+    window.__walrooNavigate = navigate;
+
+    document.addEventListener("click", function (event) {
+      var link = event.target.closest("[data-goto]");
+      if (!link) return;
+      navigate(link.dataset.goto);
     });
 
     var cabinetOpen = document.getElementById("cabinetOpen");
