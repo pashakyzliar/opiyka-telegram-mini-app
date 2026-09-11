@@ -1915,15 +1915,26 @@ input::placeholder, textarea::placeholder { color: var(--ink-muted); }
   font: 500 13px/1 var(--font-text);
   cursor: pointer;
 }
+/* Поле вводу стоїть над доком і не їздить разом зі стрічкою листування:
+   писати повідомлення, доганяючи поле скролом, незручно. */
 .roo-composer {
-  position: sticky;
-  bottom: 0;
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  z-index: 45;
+  width: min(560px, calc(100vw - 28px));
   display: grid;
   grid-template-columns: 1fr 52px;
   gap: 8px;
-  padding-top: 8px;
-  background: linear-gradient(180deg, transparent, var(--roo-lavender) 40%);
+  padding: 8px;
+  border: 1px solid var(--roo-divider);
+  border-radius: var(--radius);
+  background: var(--roo-surface);
+  box-shadow: var(--shadow);
 }
+/* Стрічка сама відсувається, щоб останнє повідомлення не ховалось під полем. */
+#view-roo { padding-bottom: 92px; }
 .roo-composer textarea {
   min-height: 52px;
   max-height: 140px;
@@ -1984,23 +1995,58 @@ body.theme-blue .bg-vignette {
     radial-gradient(80% 46% at 100% 14%, rgba(26, 104, 165, .16), transparent 66%),
     var(--roo-lavender);
 }
-/* На темному фоні світло-синя кишеня вже не «світла»: текст на ній має
-   бути світлим, інакше він зникає. */
-body.theme-blue .pocket-soft { color: var(--roo-plum); }
+/* Світлі кишені в темній темі перестають бути світлими, тож усе, що на них
+   лежить, доводиться перефарбовувати явно. Правило просте: синя поверхня —
+   світлий текст, абрикосова лишається світлою — на ній текст темний. */
+body.theme-blue .pocket-soft,
 body.theme-blue .pocket-soft .cell-label,
 body.theme-blue .pocket-soft .cell-sub,
+body.theme-blue .pocket-soft .cell-sub2,
+body.theme-blue .pocket-soft .cell-meta,
 body.theme-blue .pocket-soft .cell-value,
-body.theme-blue .pocket-soft .cell-value.money { color: var(--roo-plum); }
+body.theme-blue .pocket-soft .cell-value.money,
+body.theme-blue .pocket-soft .denomination,
+body.theme-blue .pocket-soft .denomination.money { color: var(--roo-plum); }
+body.theme-blue .pocket-soft .cell-label,
+body.theme-blue .pocket-soft .cell-sub,
+body.theme-blue .pocket-soft .cell-meta { opacity: 1; color: var(--roo-plum-soft); }
+body.theme-blue .pocket-soft .allowance-why { color: var(--roo-purple-hi); }
+
 body.theme-blue .pocket-accent,
 body.theme-blue .pocket-accent .cell-label,
 body.theme-blue .pocket-accent .cell-sub,
 body.theme-blue .pocket-accent .cell-value,
-body.theme-blue .pocket-accent .cell-value.money { color: #14243A; }
-body.theme-blue .pocket-soft .cell-value.negative,
+body.theme-blue .pocket-accent .cell-value.money,
+body.theme-blue .pocket-accent .cell-out-link { color: #12233A; opacity: 1; }
+
+/* Вирок і мінус: на темному потрібні світлі відтінки, на абрикосовому —
+   темні. Один колір на обидва випадки не працює. */
+body.theme-blue .cell-value.negative,
+body.theme-blue .cell-hero.over .denomination,
+body.theme-blue .pocket-soft .cell-value.negative { color: var(--roo-negative); }
 body.theme-blue .pocket-accent .cell-value.negative { color: #7A1712; }
+
+body.theme-blue .cell-hero .bar-track { background: rgba(174, 207, 255, .18); }
+body.theme-blue .week-split-bar i { background: var(--roo-purple); }
+body.theme-blue .week-split[data-tone="ok"] .week-split-bar i { background: var(--roo-purple-hi); }
+
+/* Головна дія лишається абрикосовою, тож текст на ній — темний. */
+body.theme-blue .btn-add { color: #12233A; }
+body.theme-blue .btn-icon-lg { background: var(--roo-surface-2); }
+
 body.theme-blue .avatar-btn { background: var(--roo-purple); color: #fff; }
-body.theme-blue .roo-dock-mark img,
-body.theme-blue .wallet-mini-mark { color: #fff; }
+body.theme-blue .head-btn[aria-pressed="true"] { background: var(--roo-purple); color: #fff; }
+body.theme-blue .brand-tile { background: var(--roo-surface); border: 1px solid var(--roo-divider); }
+body.theme-blue .brand-tile img { color: var(--roo-purple-hi); }
+body.theme-blue .linkish,
+body.theme-blue .cell-out-link { color: var(--roo-purple-hi); }
+body.theme-blue .onboarding { background: rgba(3, 8, 18, .78); }
+body.theme-blue .import-sheet { background: rgba(3, 8, 18, .7); }
+body.theme-blue .roo-bot { background: var(--roo-surface-2); }
+body.theme-blue .roo-chip { background: var(--roo-surface-2); }
+body.theme-blue .cal-cell[aria-current="date"] { background: var(--roo-purple); color: #fff; }
+body.theme-blue .type-toggle button { color: var(--roo-plum-soft); }
+body.theme-blue .type-toggle button.active { color: #fff; }
 
 /* ===================================================================
    Огляд за макетом Roo Pop: шапка з плиткою бренду, слоган, асиметрична

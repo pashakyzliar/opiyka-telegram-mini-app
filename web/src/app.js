@@ -229,6 +229,19 @@
   }
   function softAmount(raw) { var p = parseAmount(raw); return p.ok ? p.value : null; }
 
+  // Для планових полів нуль — осмислене значення: «цього дня не витрачаю».
+  // parseAmount його відхиляє, бо створений для сум операцій, де нуль
+  // справді помилка.
+  function parsePlanAmount(raw) {
+    var text = String(raw == null ? "" : raw).trim().replace(/\s/g, "").replace(",", ".");
+    if (!text) return { ok: true, value: 0 };
+    if (!/^\d*\.?\d+$/.test(text)) return { ok: false, msg: "Введіть число, напр. 0 або 450." };
+    var value = Number(text);
+    if (!isFinite(value) || value < 0) return { ok: false, msg: "Сума не може бути відʼємною." };
+    if (value > 1e12) return { ok: false, msg: "Занадто велика сума." };
+    return { ok: true, value: Math.round(value * 100) / 100 };
+  }
+
   // getComputedStyle forces a style recalc, and a full render asked for a
   // colour once per row, per budget, per legend entry — hundreds of calls that
   // between them cost more than everything else on the frame. The values only
@@ -1396,7 +1409,6 @@
   }
 
   function renderLedger() {
-    document.getElementById("monthLabel").textContent = monthLabel(state.viewMonth);
     var body = document.getElementById("txBody");
     var summary = document.getElementById("ledgerSummary");
     // Rows slide to their new places instead of jumping — but only when the
@@ -2229,7 +2241,9 @@
     document.querySelectorAll("[data-weekday]").forEach(function (inp) {
       var idx = Number(inp.dataset.weekday) || 0;
       if (document.activeElement === inp) return;
-      inp.value = s.weekDaily[idx] ? String(s.weekDaily[idx]) : "";
+      // Нуль показуємо саме нулем: порожнє поле читалось як «не задано»,
+      // хоча це свідомий вибір «цього дня не витрачаю».
+      inp.value = String(s.weekDaily[idx] || 0);
     });
     var cm = document.getElementById("calmMode");
     if (cm) cm.checked = !!s.calmMode;
@@ -2512,6 +2526,39 @@
     // BOM + semicolons: Excel on a Ukrainian locale opens this straight.
     var csv = "﻿" + head.map(cell).join(";") + "\r\n" + rows.join("\r\n") + "\r\n";
     return saveFile("kopiyka-" + todayISO() + ".csv", csv);
+  }
+
+  /* Очищення історії — не те саме, що видалення акаунта. Операції, регулярні
+     платежі, великі витрати й борги зникають, а налаштування лишаються:
+     категорії, ліміти, тижневий план, PIN, словник. Тобто після очищення
+     можна одразу починати вести облік заново, нічого не налаштовуючи. */
+  function requestHistoryClear() {
+    if (!store || !store.replaceAll) {
+      showError("історія", "Очищення недоступне без підключеного сховища.");
+      return;
+    }
+    var count = state.transactions.length;
+    if (!count && !state.recurring.length && !state.debts.length && !state.amortize.length) {
+      showError("історія", "Історія вже порожня.");
+      return;
+    }
+    confirmBox("Видалити всі операції, регулярні платежі, великі витрати й борги? Категорії, ліміти й налаштування залишаться. Скасувати це буде неможливо.").then(function (ok) {
+      if (!ok) return;
+      return confirmBox("Останнє підтвердження: очистити історію? Операцій буде видалено: " + count + ".").then(function (again) {
+        if (!again) return;
+        // Заощадження теж скидаємо: без операцій, з яких вони порахувались,
+        // цифра перенесеного «навару» перетворилась би на фантом.
+        var payload = {
+          transactions: [], goals: [], recurring: [], debts: [], amortize: [],
+          settings: Object.assign({}, settings(), { navarHistory: [], salaryPayments: [], recSkip: [] })
+        };
+        return Promise.resolve(store.replaceAll(payload)).then(function () {
+          state.filter = null;
+          showError("історія", "Готово. Історію очищено, налаштування збережено.");
+          renderAll();
+        }).catch(function (error) { reportFailure("історія", error); });
+      });
+    });
   }
 
   function requestAccountDeletion() {
@@ -3917,7 +3964,7 @@
     if (wr && document.activeElement !== wr) wr.value = s.weekReserve ? String(s.weekReserve) : "";
     document.querySelectorAll("[data-weekday]").forEach(function (inp) {
       var index = Number(inp.dataset.weekday) || 0;
-      if (document.activeElement !== inp) inp.value = s.weekDaily[index] ? String(s.weekDaily[index]) : "";
+      if (document.activeElement !== inp) inp.value = String(s.weekDaily[index] || 0);
     });
     var cm = document.getElementById("calmMode");
     if (cm) cm.checked = !!s.calmMode;
@@ -3945,7 +3992,11 @@
     dropMonthCache();
     renderDashboardDate();
     // Перемикач місяця має сенс лише там, де показані місячні числа.
+    // Підпис виставляємо тут, а не всередині журналу: інакше на Огляді
+    // між стрілками лишалась порожнеча.
     var monthSwitcher = document.getElementById("monthSwitcher");
+    var monthLabelEl = document.getElementById("monthLabel");
+    if (monthLabelEl) monthLabelEl.textContent = monthLabel(state.viewMonth);
     if (monthSwitcher) {
       monthSwitcher.hidden = !(
         (state.view === "overview" && state.overviewMode === "month") ||
@@ -4814,14 +4865,10 @@
     });
     document.querySelectorAll("[data-weekday]").forEach(function (inp) {
       inp.addEventListener("change", function () {
-        var raw = String(inp.value).trim();
         var next = normalizeWeekDaily(settings().weekDaily);
-        if (!raw) next[Number(inp.dataset.weekday) || 0] = 0;
-        else {
-          var p = parseAmount(raw);
-          if (!p.ok) { showError("налаштування", p.msg); inp.focus(); return; }
-          next[Number(inp.dataset.weekday) || 0] = p.value;
-        }
+        var p = parsePlanAmount(inp.value);
+        if (!p.ok) { showError("Тиждень", p.msg); inp.focus(); return; }
+        next[Number(inp.dataset.weekday) || 0] = p.value;
         saveSettings({ weekDaily: next });
         renderAll();
       });
@@ -4856,7 +4903,8 @@
     });
 
     document.getElementById("btnCsv").addEventListener("click", doCsv);
-    document.getElementById("btnDeleteAccount").addEventListener("click", requestAccountDeletion);
+    var clearHistory = document.getElementById("btnClearHistory");
+    if (clearHistory) clearHistory.addEventListener("click", requestHistoryClear);
 
     // search
     document.getElementById("searchToggle").addEventListener("click", function () {
