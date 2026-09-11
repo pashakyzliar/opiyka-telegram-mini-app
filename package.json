@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server/server.js",
     "test": "node --test --test-concurrency=1 server/test/*.test.js",
+    "evals": "npx --yes promptfoo@latest eval -c server/test/evals/promptfooconfig.yaml",
     "db:migrate": "node ./node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations up",
     "db:rollback": "node ./node_modules/node-pg-migrate/bin/node-pg-migrate.js -m server/db/migrations down -1",
     "db:import-json": "node server/import-json.js"

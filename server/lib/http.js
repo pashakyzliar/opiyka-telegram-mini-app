@@ -1,6 +1,52 @@
 "use strict";
 
+const crypto = require("node:crypto");
+
 const { appError } = require("./errors");
+
+// Mini App живе у WebView Telegram, але вебверсії (web.telegram.org) вбудовують
+// його в iframe — тому frame-ancestors перелічує саме їх, а не 'none'.
+// Шрифти тягнуться з Google Fonts, а telegram-web-app.js — з telegram.org
+// (див. web/index.html). style-src потребує 'unsafe-inline', бо app.js рендерить
+// інлайнові стилі; прибрати це можна лише разом із рефакторингом рендера.
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self' https://telegram.org",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: https:",
+  "connect-src 'self'",
+  "frame-ancestors https://web.telegram.org https://*.telegram.org",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "object-src 'none'"
+].join("; ");
+
+// Режим за замовчуванням — Report-Only: політику треба спершу перевірити на всіх
+// клієнтах Telegram (iOS, Android, Desktop, Web), і лише тоді вмикати CSP_MODE=enforce.
+function securityHeaders(res, mode) {
+  const cspMode = String(mode || "report-only").toLowerCase();
+  if (cspMode !== "off") {
+    res.setHeader(cspMode === "enforce" ? "Content-Security-Policy" : "Content-Security-Policy-Report-Only", CSP_DIRECTIVES);
+  }
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+}
+
+// ETag рахується від тіла, а не від часу: два однакові стани мають дати
+// однаковий тег, інакше 304 ніколи не спрацює.
+function etagFor(body) {
+  return '"' + crypto.createHash("sha1").update(body).digest("base64") + '"';
+}
+
+function notModified(res, etag) {
+  res.writeHead(304, {
+    ETag: etag,
+    "Cache-Control": "no-store"
+  });
+  res.end();
+}
 
 function json(res, status, value, headers) {
   const body = JSON.stringify(value);
@@ -47,5 +93,9 @@ module.exports = {
   json,
   errorJson,
   corsHeaders,
-  bodyJson
+  bodyJson,
+  securityHeaders,
+  etagFor,
+  notModified,
+  CSP_DIRECTIVES
 };

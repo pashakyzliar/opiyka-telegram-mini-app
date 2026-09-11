@@ -181,6 +181,7 @@
     var settingsListeners = [];
     var timer = null;
     var refreshPromise = null;
+    var stateEtag = "";
 
     function notify() {
       collectionListeners.slice().forEach(function (item) {
@@ -199,9 +200,38 @@
       });
     }
 
+    /* Опитування з ETag.
+     *
+     * Відповіді API йдуть з `Cache-Control: no-store`, тож браузер сам
+     * ревалідацію не зробить — і фінансові дані свідомо не лягають у дисковий
+     * кеш WebView. Натомість тег зберігається в пам'яті: сервер відповідає 304
+     * без тіла, коли нічого не змінилося, і повний стан акаунта не їде по
+     * мобільному інтернету кожні 45 секунд.
+     */
+    function fetchState() {
+      var options = { method: "GET", headers: headers(false) };
+      if (stateEtag) options.headers["If-None-Match"] = stateEtag;
+      return fetch(apiUrl("/api/state"), options).then(function (res) {
+        if (res.status === 304) return null;
+        return res.text().then(function (raw) {
+          var data = null;
+          try { data = raw ? JSON.parse(raw) : null; } catch (e) {}
+          if (!res.ok) {
+            var err = new Error((data && data.error) || ("HTTP " + res.status));
+            err.code = (data && data.code) || ("http_" + res.status);
+            throw err;
+          }
+          stateEtag = (res.headers && typeof res.headers.get === "function" && res.headers.get("ETag")) || "";
+          return data;
+        });
+      });
+    }
+
     function refresh() {
       if (refreshPromise) return refreshPromise;
-      refreshPromise = request("/api/state", { method: "GET" }).then(function (next) {
+      refreshPromise = fetchState().then(function (next) {
+        // null означає 304: стан той самий, перемальовувати нічого.
+        if (next === null) return cache;
         cache = next || {};
         notify();
         return cache;

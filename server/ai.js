@@ -82,42 +82,13 @@ function fail(code, message) {
 
 /* ------------------------------ ліміти ------------------------------ */
 
-// Стан у пам'яті: сервіс живе в одній репліці, тож цього достатньо.
-// Перезапуск обнуляє лічильники — свідомий компроміс, не баг.
-const usage = new Map();
-
-function dayKey(ms) {
-  return new Date(ms).toISOString().slice(0, 10);
-}
-
-/**
- * Резервує слот ДО звернення до провайдера. Невдалий запит теж списується —
- * інакше поламаний провайдер за секунди з'їв би місячну квоту на ретраях.
- */
-function reserve(userId) {
-  const now = Date.now();
-  const today = dayKey(now);
-  let row = usage.get(userId);
-  if (!row || row.day !== today) {
-    row = { day: today, count: 0, last: 0 };
-    usage.set(userId, row);
-  }
-  if (now - row.last < AI_MIN_GAP_MS) {
-    return { ok: false, code: "rate_limited", message: "Занадто часто. Зачекай кілька секунд." };
-  }
-  if (row.count >= AI_DAILY_LIMIT) {
-    return { ok: false, code: "rate_limited", message: "Ліміт AI-запитів на сьогодні вичерпано." };
-  }
-  row.count += 1;
-  row.last = now;
-  return { ok: true, used: row.count, limit: AI_DAILY_LIMIT };
-}
-
-function quotaFor(userId) {
-  const row = usage.get(userId);
-  const used = row && row.day === dayKey(Date.now()) ? row.count : 0;
-  return { used: used, limit: AI_DAILY_LIMIT };
-}
+// Самі ліміти рахує server/ai-usage.js у PostgreSQL. Тут лишаються тільки
+// значення: лічильник у пам'яті процесу обнулявся при кожному рестарті, тож
+// обмеження фактично не діяло.
+const LIMITS = {
+  daily: AI_DAILY_LIMIT,
+  minGapMs: AI_MIN_GAP_MS
+};
 
 /* --------------------------- розбір відповіді --------------------------- */
 
@@ -305,4 +276,4 @@ async function chatWithTools(messages, tools, options) {
   };
 }
 
-module.exports = { configured, reserve, quotaFor, askJson, chatWithTools, extractJson, AI_MODEL };
+module.exports = { configured, LIMITS, askJson, chatWithTools, extractJson, AI_MODEL };

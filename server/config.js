@@ -52,5 +52,8 @@ module.exports = {
   databaseUrl: String(process.env.DATABASE_URL || "postgres://kopiyka:kopiyka@127.0.0.1:5432/kopiyka"),
   databaseSsl: sslConfig(),
   maxBodyBytes: numberEnv("MAX_BODY_BYTES", 2 * 1024 * 1024),
+  // report-only | enforce | off. За замовчуванням лише звіти: політику треба
+  // спершу перевірити на всіх клієнтах Telegram, і тільки тоді вмикати enforce.
+  cspMode: String(process.env.CSP_MODE || "report-only").toLowerCase(),
   jsonImportSource: path.resolve(process.env.JSON_IMPORT_SOURCE || path.join(__dirname, "data", "users.json"))
 };

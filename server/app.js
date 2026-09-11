@@ -7,11 +7,13 @@ const path = require("node:path");
 
 const config = require("./config");
 const ai = require("./ai");
+const aiUsage = require("./ai-usage");
 const botAi = require("./bot-ai");
 const roo = require("./roo");
 const { dayAllowance } = require("./allowance");
 const { authenticatedUser, pseudonymizeTelegramId } = require("./auth/telegram");
-const { json, errorJson, corsHeaders, bodyJson } = require("./lib/http");
+const { json, errorJson, corsHeaders, bodyJson, securityHeaders, etagFor, notModified } = require("./lib/http");
+const { accountTimeZone } = require("./lib/dates");
 const { isAppError } = require("./lib/errors");
 const { COLLECTIONS } = require("./lib/state");
 const { withTransaction, withUserContext, withUserIdContext, mapDbError } = require("./db");
@@ -69,12 +71,14 @@ function userQuotaKey(auth) {
 
 async function askAiForUser(auth, prompt) {
   const key = userQuotaKey(auth);
-  const gate = ai.reserve(key);
+  // Квота тепер у PostgreSQL, тож переживає рестарт і деплой.
+  const gate = await aiUsage.reserve(key);
   if (!gate.ok) throw Object.assign(new Error(gate.message), { code: gate.code });
   try {
     const out = await ai.askJson(prompt);
     if (out.usage) {
       console.log("AI", gate.used + "/" + gate.limit, out.model, JSON.stringify(out.usage));
+      await aiUsage.record(key, out.usage);
     }
     return out.result;
   } catch (error) {
@@ -134,7 +138,9 @@ function glossaryForAccount(account) {
 }
 
 function allowanceInfoForAccount(account) {
-  const info = dayAllowance(account, botAi.todayISO());
+  // «Сьогодні» рахується за часовим поясом користувача, а не сервера: інакше
+  // на UTC-хості запис після опівночі за Києвом потрапляв у вчорашній день.
+  const info = dayAllowance(account, botAi.todayISO(accountTimeZone(account)));
   info.expenseCategories = expenseCategoriesForAccount(account);
   return info;
 }
@@ -258,7 +264,9 @@ async function resolveCategorySelection(telegramId, txId, categoryIndex) {
     if (!category) return { ok: false };
     await accountService.updateCollectionRow(client, userId, "transactions", txId, "PATCH", {
       category: category.name,
-      pending: false
+      pending: false,
+      // Вибір людини — найвищий пріоритет: автоматика його не перезаписує.
+      categorySource: "user"
     });
     const srcWord = String(tx.srcWord || "").trim();
     if (srcWord) await accountService.learnGlossary(client, userId, srcWord, category.name);
@@ -267,7 +275,8 @@ async function resolveCategorySelection(telegramId, txId, categoryIndex) {
       ok: true,
       text: srcWord ? "Запамʼятав: «" + srcWord + "» → " + category.name : "Категорію збережено.",
       transaction: next.transactions.find((row) => row.id === txId) || null,
-      allowance: allowanceInfoForAccount(next)
+      allowance: allowanceInfoForAccount(next),
+      timeZone: accountTimeZone(next)
     };
   });
 }
@@ -292,20 +301,27 @@ async function handleBotWrite(message) {
   const telegramId = String((message.from && message.from.id) || "");
   const account = await botAccountState(telegramId);
   const categories = expenseCategoriesForAccount(account);
+  const timeZone = accountTimeZone(account);
   let rows = [];
   const glossary = await botGlossary(telegramId);
-  const quick = botAi.resolveGlossaryWrite(text, Object.assign({}, glossaryForAccount(account), glossary), categories);
+  const quick = botAi.resolveGlossaryWrite(text, Object.assign({}, glossaryForAccount(account), glossary), categories, timeZone);
+  // Щаблі йдуть від найдешевшого до найдорожчого: словник → історія власних
+  // записів → модель. Кожен наступний викликається лише тоді, коли попередній
+  // не дав упевненої відповіді.
+  const fromHistory = quick ? null : botAi.resolveFromHistory(text, account.transactions, categories, timeZone);
 
   if (quick) {
     await botGlossaryHit(telegramId, botAi.normalizeWord(quick.srcWord));
     rows = [quick];
+  } else if (fromHistory) {
+    rows = [fromHistory];
   } else {
     if (!ai.configured()) {
       return sendBotMessage(message.chat.id, "AI на сервері не налаштовано.\n" + botAi.helpText(config.publicUrl), appMarkup());
     }
-    const data = await askAiForUser({ telegramKey: pseudonymizeTelegramId(telegramId) }, botAi.buildWritePrompt(text, categories));
+    const data = await askAiForUser({ telegramKey: pseudonymizeTelegramId(telegramId) }, botAi.buildWritePrompt(text, categories, timeZone));
     const rawRows = Array.isArray(data) ? data : (data && Array.isArray(data.operations) ? data.operations : []);
-    rows = rawRows.map((row) => botAi.normalizeDraft(row, categories)).filter(Boolean);
+    rows = rawRows.map((row) => botAi.normalizeDraft(row, categories, timeZone)).filter(Boolean);
   }
 
   const note = rows.length === 1 ? botAi.noteFromUserText(text) : "";
@@ -337,7 +353,7 @@ async function handleBotWrite(message) {
   const nextAccount = await botAccountState(telegramId);
   return sendBotMessage(
     message.chat.id,
-    botAi.formatWriteReply(saved, allowanceInfoForAccount(nextAccount)),
+    botAi.formatWriteReply(saved, allowanceInfoForAccount(nextAccount), timeZone),
     saved.length === 1 ? undoMarkup(saved[0].id) : appMarkup(),
     "HTML"
   );
@@ -350,11 +366,12 @@ async function handleBotAsk(message) {
   const text = String(message.text || "").trim();
   const telegramId = String((message.from && message.from.id) || "");
   const account = await botAccountState(telegramId);
+  const timeZone = accountTimeZone(account);
   const filterPayload = await askAiForUser(
     { telegramKey: pseudonymizeTelegramId(telegramId) },
-    botAi.buildAskPrompt(text, expenseCategoriesForAccount(account))
+    botAi.buildAskPrompt(text, expenseCategoriesForAccount(account), timeZone)
   );
-  const filter = botAi.normalizeFilter(filterPayload, expenseCategoriesForAccount(account));
+  const filter = botAi.normalizeFilter(filterPayload, expenseCategoriesForAccount(account), timeZone);
   const rows = botAi.filterTransactions(account.transactions, filter);
   const total = botAi.sumTransactions(rows);
   return sendBotMessage(message.chat.id, botAi.formatAskReply(filter, rows, total), appMarkup());
@@ -427,7 +444,7 @@ async function handleBotCallback(query) {
     await telegramCall("editMessageText", {
       chat_id: query.message.chat.id,
       message_id: query.message.message_id,
-      text: botAi.formatWriteReply([resolved.transaction], resolved.allowance),
+      text: botAi.formatWriteReply([resolved.transaction], resolved.allowance, resolved.timeZone),
       parse_mode: "HTML",
       reply_markup: undoMarkup(resolved.transaction.id)
     });
@@ -498,7 +515,7 @@ async function api(req, res, pathname) {
     if (!message) return errorJson(res, 400, "bad_request", "Порожнє повідомлення.");
     if (message.length > 1000) return errorJson(res, 400, "bad_request", "Повідомлення задовге.");
     // Квота спільна з рештою AI: помічник не має бути дірою в обмеженнях.
-    const gate = ai.reserve(userQuotaKey(auth));
+    const gate = await aiUsage.reserve(userQuotaKey(auth));
     if (!gate.ok) return errorJson(res, 429, gate.code, gate.message);
     // Стан читаємо в тому ж контексті користувача, що й решта API, тож
     // ізоляція між акаунтами тут та сама, а не окрема.
@@ -510,6 +527,9 @@ async function api(req, res, pathname) {
         history: payload && payload.history,
         timezoneOffset: payload && payload.timezoneOffset
       });
+      // Токени за всі кроки циклу — у статистику. Відповідь користувачу не
+      // чекає на цей запис, тому помилка обліку не ламає діалог.
+      if (result.usage) void aiUsage.record(userQuotaKey(auth), result.usage);
       return json(res, 200, result);
     } catch (error) {
       console.error("Roo:", error && error.code, error && error.message);
@@ -544,7 +564,12 @@ async function api(req, res, pathname) {
 
   if (req.method === "GET" && pathname === "/api/state") {
     const state = await withUserContext(auth.telegramKey, false, (client, userId) => accountService.getState(client, userId));
-    return json(res, 200, state);
+    // Клієнт опитує стан кожні 45 секунд. Якщо нічого не змінилося, 304
+    // економить і трафік телефона, і серіалізацію повного акаунта.
+    const body = JSON.stringify(state);
+    const etag = etagFor(body);
+    if (req.headers["if-none-match"] === etag) return notModified(res, etag);
+    return json(res, 200, state, { ETag: etag });
   }
 
   if (req.method === "GET" && pathname === "/api/profile") {
@@ -596,7 +621,8 @@ async function api(req, res, pathname) {
 
   if (req.method === "GET" && pathname === "/api/ai/status") {
     if (!ai.configured()) return json(res, 200, { enabled: false });
-    return json(res, 200, Object.assign({ enabled: true, model: ai.AI_MODEL }, ai.quotaFor(userQuotaKey(auth))));
+    const quota = await aiUsage.quota(userQuotaKey(auth));
+    return json(res, 200, Object.assign({ enabled: true, model: ai.AI_MODEL }, quota));
   }
 
   if (req.method === "POST" && pathname === "/api/ai") {
@@ -728,6 +754,7 @@ async function quickApi(req, res) {
 function createAppServer() {
   return http.createServer(async (req, res) => {
     corsHeaders(res, config.corsOrigin);
+    securityHeaders(res, config.cspMode);
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       return res.end();

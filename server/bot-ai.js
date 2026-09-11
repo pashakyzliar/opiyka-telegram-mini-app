@@ -1,5 +1,7 @@
 "use strict";
 
+const { todayInZone } = require("./lib/dates");
+
 const EXPENSE_CATS = ["Транспорт", "Кафе і ресторани", "Доставка їжі", "Розваги", "Продукти", "Тютюн і алкоголь", "Підписки"];
 const INCOME_CATS = ["ЗП", "Аванс", "Підробіток", "Інше"];
 const WALLETS = ["Кеш"];
@@ -11,9 +13,10 @@ function pad(n) {
   return n < 10 ? "0" + n : String(n);
 }
 
-function todayISO() {
-  const now = new Date();
-  return now.getFullYear() + "-" + pad(now.getMonth() + 1) + "-" + pad(now.getDate());
+// Дату визначає часовий пояс КОРИСТУВАЧА. Без поясу (акаунт ще не відкривав
+// Mini App після оновлення) поведінка лишається старою — за часом процесу.
+function todayISO(timeZone) {
+  return todayInZone(timeZone, null);
 }
 
 function isoAdd(iso, days) {
@@ -105,7 +108,7 @@ function sourceWord(text) {
   return sourceWords(text)[0] || "";
 }
 
-function resolveGlossaryWrite(text, glossary, expenseCategories) {
+function resolveGlossaryWrite(text, glossary, expenseCategories, timeZone) {
   const numbers = String(text || "").match(/\d+(?:[\s.,]\d+)*/g) || [];
   if (numbers.length !== 1) return null;
   const amount = parseAmount(numbers[0]);
@@ -122,14 +125,81 @@ function resolveGlossaryWrite(text, glossary, expenseCategories) {
     category,
     amount,
     wallet: WALLETS[0],
-    date: todayISO(),
+    date: todayISO(timeZone),
     note: noteFromUserText(text),
-    srcWord: rawWord
+    srcWord: rawWord,
+    categorySource: "glossary"
   };
 }
 
-function buildWritePrompt(text, expenseCategories) {
-  const today = todayISO();
+/* --------------------------- категорія з історії --------------------------- */
+
+// Проміжний щабель між словником і моделлю: якщо людина вже кілька разів
+// записувала те саме словосполучення в одну категорію, питати про це модель
+// немає сенсу. Це і швидше, і точніше, і безкоштовно.
+const HISTORY_WINDOW_DAYS = 180;
+const HISTORY_MIN_HITS = 2;
+const HISTORY_MIN_SHARE = 0.7;
+
+// Ключ нормалізує кожне слово так само, як словник, тож «атб», «АТБ» і «атб!»
+// дають один ключ. Порядок слів зберігається: «кава дорога» ≠ «дорога кава».
+function historyKey(text) {
+  return sourceWords(text).map(normalizeWord).filter(Boolean).join(" ");
+}
+
+function resolveFromHistory(text, transactions, expenseCategories, timeZone) {
+  const numbers = String(text || "").match(/\d+(?:[\s.,]\d+)*/g) || [];
+  if (numbers.length !== 1) return null;
+  const amount = parseAmount(numbers[0]);
+  if (amount == null) return null;
+
+  const key = historyKey(text);
+  if (!key) return null;
+
+  const allowed = expenseCategoryNames(expenseCategories);
+  const today = todayISO(timeZone);
+  const from = isoAdd(today, -HISTORY_WINDOW_DAYS);
+  const counts = new Map();
+  let total = 0;
+
+  (Array.isArray(transactions) ? transactions : []).forEach((row) => {
+    if (!row || row.type !== "expense" || row.pending) return;
+    if (!row.category || !allowed.includes(row.category)) return;
+    if (!isIsoDate(row.date) || row.date < from) return;
+    if (historyKey(row.note) !== key) return;
+    counts.set(row.category, (counts.get(row.category) || 0) + 1);
+    total += 1;
+  });
+
+  if (total < HISTORY_MIN_HITS) return null;
+
+  let best = "";
+  let bestCount = 0;
+  counts.forEach((count, category) => {
+    if (count > bestCount) {
+      bestCount = count;
+      best = category;
+    }
+  });
+
+  // Одна й та сама покупка могла потрапляти в різні категорії. Беремо історію
+  // до уваги тільки тоді, коли вибір користувача був послідовним.
+  if (!best || bestCount < HISTORY_MIN_HITS || bestCount / total < HISTORY_MIN_SHARE) return null;
+
+  return {
+    type: "expense",
+    category: best,
+    amount,
+    wallet: WALLETS[0],
+    date: today,
+    note: noteFromUserText(text),
+    srcWord: sourceWord(text),
+    categorySource: "history"
+  };
+}
+
+function buildWritePrompt(text, expenseCategories, timeZone) {
+  const today = todayISO(timeZone);
   return [
     "Ти розбираєш український текст про особисті фінанси на окремі операції.",
     "Сьогодні: " + today + ".",
@@ -149,38 +219,54 @@ function buildWritePrompt(text, expenseCategories) {
   ].join("\n");
 }
 
-function buildAskPrompt(question, expenseCategories) {
+// Схема фільтра спільна для бота, Mini App і Roo: раніше бот не вмів
+// обмежувати суму й шукати за нотаткою, тож «ресторани більше 500 грн»
+// працювало лише в помічнику.
+function buildAskPrompt(question, expenseCategories, timeZone) {
   return [
     "Користувач питає про свої фінанси. Поверни ТІЛЬКИ JSON-фільтр, не рахуй сам.",
-    "Сьогодні: " + todayISO() + ".",
+    "Сьогодні: " + todayISO(timeZone) + ".",
     "Статті витрат: " + expenseCategoryNames(expenseCategories).join(", ") + ".",
     "Статті доходу: " + INCOME_CATS.join(", ") + ".",
-    "{\"categories\":[\"...\"],\"type\":\"expense\"|\"income\"|null,\"from\":\"YYYY-MM-DD\",\"to\":\"YYYY-MM-DD\",\"title\":\"короткий підпис\"}",
+    "{\"categories\":[\"...\"],\"type\":\"expense\"|\"income\"|null,\"from\":\"YYYY-MM-DD\",\"to\":\"YYYY-MM-DD\"," +
+      "\"minAmount\":null,\"maxAmount\":null,\"query\":\"\",\"title\":\"короткий підпис\"}",
     "Порожній масив categories означає всі категорії.",
+    "minAmount і maxAmount — межі суми однієї операції, число або null.",
+    "query — підрядок у нотатці, якщо користувач назвав конкретну покупку; інакше порожній рядок.",
     "Якщо період не названо, став останні 12 місяців.",
     "",
     "Питання: " + question
   ].join("\n");
 }
 
-function normalizeDraft(row, expenseCategories) {
+function normalizeDraft(row, expenseCategories, timeZone) {
   if (!row || typeof row !== "object") return null;
   const amount = parseAmount(row.amount);
   if (amount == null) return null;
   const type = row.type === "income" ? "income" : "expense";
   const categories = type === "income" ? INCOME_CATS : expenseCategoryNames(expenseCategories);
   const wallet = WALLETS.includes(row.wallet) ? row.wallet : WALLETS[0];
-  const date = isIsoDate(row.date) ? String(row.date) : todayISO();
+  const date = isIsoDate(row.date) ? String(row.date) : todayISO(timeZone);
   const note = String(row.note || "").trim().slice(0, 120);
+  // categorySource показує, який щабель дав категорію: словник, історія,
+  // модель чи сам користувач. Це KPI точності, і він же не дає перезаписати
+  // ручний вибір автоматикою.
   if (!categories.includes(row.category)) {
-    if (type === "expense") return { type, category: null, amount, wallet, date, note, needsCategory: true };
-    return { type, category: categories[0], amount, wallet, date, note, needsCategory: false };
+    if (type === "expense") return { type, category: null, amount, wallet, date, note, needsCategory: true, categorySource: "ai" };
+    return { type, category: categories[0], amount, wallet, date, note, needsCategory: false, categorySource: "ai" };
   }
-  return { type, category: row.category, amount, wallet, date, note, needsCategory: false };
+  return { type, category: row.category, amount, wallet, date, note, needsCategory: false, categorySource: "ai" };
 }
 
-function normalizeFilter(value, expenseCategories) {
-  const today = todayISO();
+function normalizeAmountLimit(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1e12) return null;
+  return Math.round(parsed * 100) / 100;
+}
+
+function normalizeFilter(value, expenseCategories, timeZone) {
+  const today = todayISO(timeZone);
   const fallbackFrom = isoAdd(today, -365);
   const result = value && typeof value === "object" ? value : {};
   const allowedExpense = expenseCategoryNames(expenseCategories);
@@ -191,11 +277,22 @@ function normalizeFilter(value, expenseCategories) {
   const from = isIsoDate(result.from) ? String(result.from) : fallbackFrom;
   const to = isIsoDate(result.to) ? String(result.to) : today;
   const title = String(result.title || "").trim().slice(0, 120);
-  return { categories, type, from, to, title };
+  let minAmount = normalizeAmountLimit(result.minAmount);
+  let maxAmount = normalizeAmountLimit(result.maxAmount);
+  // Модель інколи плутає межі місцями — виправляємо тут, щоб порожня вибірка
+  // не виглядала як «нічого не знайдено».
+  if (minAmount != null && maxAmount != null && minAmount > maxAmount) {
+    const swap = minAmount;
+    minAmount = maxAmount;
+    maxAmount = swap;
+  }
+  const query = String(result.query || "").trim().slice(0, 120);
+  return { categories, type, from, to, minAmount, maxAmount, query, title };
 }
 
 function filterTransactions(transactions, filter) {
   const list = Array.isArray(transactions) ? transactions : [];
+  const query = filter && filter.query ? normalizeLower(filter.query) : "";
   return list.filter((row) => {
     if (!row || row.pending || !isIsoDate(row.date)) return false;
     if (row.type !== "expense" && row.type !== "income") return false;
@@ -203,6 +300,12 @@ function filterTransactions(transactions, filter) {
     if (filter.categories.length && !filter.categories.includes(row.category)) return false;
     if (filter.from && row.date < filter.from) return false;
     if (filter.to && row.date > filter.to) return false;
+    if (filter.minAmount != null && Number(row.amount) < filter.minAmount) return false;
+    if (filter.maxAmount != null && Number(row.amount) > filter.maxAmount) return false;
+    if (query) {
+      const haystack = normalizeLower(String(row.note || "") + " " + String(row.category || ""));
+      if (haystack.indexOf(query) < 0) return false;
+    }
     return true;
   });
 }
@@ -280,9 +383,9 @@ function formatAllowanceBlock(info, show) {
     "\n<code>" + marker + " " + bar(pct) + "  " + Math.round(pct) + "%</code>";
 }
 
-function formatWriteReply(rows, allowanceInfo) {
+function formatWriteReply(rows, allowanceInfo, timeZone) {
   if (!rows.length) return "Не зміг розібрати запис. Спробуй написати щось на кшталт: 180 грн Glovo";
-  const today = todayISO();
+  const today = todayISO(timeZone);
   const expenseCategories = allowanceInfo && allowanceInfo.expenseCategories;
   const showAllowance = rows.some((row) => row.type === "expense" && row.date === today && !row.pending);
   if (rows.length === 1) {
@@ -316,11 +419,18 @@ function formatAskReply(filter, rows, total) {
     return label + "\nЗа " + formatDateRange(filter.from, filter.to) + " записів не знайшов.";
   }
   const cats = filter.categories.length ? "\nКатегорії: " + filter.categories.join(", ") : "";
+  const limits = filter.minAmount != null || filter.maxAmount != null
+    ? "\nСума операції: " +
+      (filter.minAmount != null ? "від " + formatMoney(filter.minAmount) : "") +
+      (filter.minAmount != null && filter.maxAmount != null ? " " : "") +
+      (filter.maxAmount != null ? "до " + formatMoney(filter.maxAmount) : "")
+    : "";
+  const query = filter.query ? "\nПошук: " + filter.query : "";
   return label +
     "\nСума: " + formatMoney(total) +
     "\nОперацій: " + rows.length +
     "\nПеріод: " + formatDateRange(filter.from, filter.to) +
-    cats;
+    cats + limits + query;
 }
 
 function routeBotMessage(text) {
@@ -360,6 +470,8 @@ module.exports = {
   normalizeWord,
   sourceWord,
   resolveGlossaryWrite,
+  resolveFromHistory,
+  historyKey,
   buildWritePrompt,
   buildAskPrompt,
   normalizeDraft,

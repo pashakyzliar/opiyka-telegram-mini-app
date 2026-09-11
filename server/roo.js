@@ -18,6 +18,7 @@
 
 const allowance = require("./allowance");
 const { appError } = require("./lib/errors");
+const { todayInZone, accountTimeZone } = require("./lib/dates");
 
 const MAX_ROWS = 50;
 const MAX_HISTORY = 12;
@@ -389,7 +390,10 @@ function sanitizeHistory(history) {
  * перетворюється на нескінченні виклики й порожній рахунок у провайдера.
  */
 async function converse(ai, account, payload) {
-  const ctx = buildContext(account, todayFor(payload.timezoneOffset));
+  // Часовий пояс акаунта — головне джерело. Зсув від браузера лишається
+  // запасним для акаунтів, які ще не зберегли пояс у налаштуваннях.
+  const today = todayInZone(accountTimeZone(account), payload.timezoneOffset);
+  const ctx = buildContext(account, today);
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "system", content: contextMessage(ctx) }
@@ -399,14 +403,25 @@ async function converse(ai, account, payload) {
 
   const used = [];
   let navigateTo = null;
+  // Токени за всі кроки циклу сумуються: облік вартості має враховувати
+  // повний хід розмови, а не лише останній виклик моделі.
+  const usage = { prompt_tokens: 0, completion_tokens: 0 };
+
+  function addUsage(step) {
+    if (!step) return;
+    usage.prompt_tokens += Number(step.prompt_tokens || step.input_tokens) || 0;
+    usage.completion_tokens += Number(step.completion_tokens || step.output_tokens) || 0;
+  }
 
   for (let step = 0; step < 4; step += 1) {
     const answer = await ai.chatWithTools(messages, TOOLS, { maxTokens: 700 });
+    addUsage(answer.usage);
     if (!answer.toolCalls.length) {
       return {
         reply: answer.content.trim() || "Не вдалося сформулювати відповідь. Спробуйте інакше.",
         used: used,
         navigateTo: navigateTo,
+        usage: usage,
         context: { today: ctx.today }
       };
     }

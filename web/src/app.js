@@ -1328,14 +1328,36 @@
           '<span class="legend-pct">' + Math.round((e.amt / total) * 100) + '%</span></div>';
       }).join("") + '</div>';
     donutDrawn = true;
-    wrap.querySelectorAll(".donut-seg").forEach(function (seg) {
-      seg.addEventListener("mousemove", function (ev) {
-        tip.innerHTML = '<strong>' + esc(seg.dataset.cat) + '</strong><br>' + esc(fmtShort(Number(seg.dataset.amt))) + ' · ' + esc(seg.dataset.pct) + '%';
-        tip.style.left = ev.clientX + "px"; tip.style.top = (ev.clientY - 8) + "px";
-        tip.classList.add("show");
-      });
-      seg.addEventListener("mouseleave", function () { tip.classList.remove("show"); });
+
+    // Раніше підказка висіла на mousemove, тож на телефоні її не бачив ніхто:
+    // сегмент донату — головна аналітика на екрані, а сума по категорії була
+    // доступна лише з мишею. Pointer Events покривають і палець, і мишу.
+    function hideTip() { tip.classList.remove("show"); }
+    function showTip(seg, x, y) {
+      tip.innerHTML = '<strong>' + esc(seg.dataset.cat) + '</strong><br>' + esc(fmtShort(Number(seg.dataset.amt))) + ' · ' + esc(seg.dataset.pct) + '%';
+      tip.style.left = x + "px"; tip.style.top = (y - 8) + "px";
+      tip.classList.add("show");
+    }
+
+    var segments = Array.prototype.slice.call(wrap.querySelectorAll(".donut-seg"));
+    segments.forEach(function (seg) {
+      seg.addEventListener("pointerdown", function (ev) { showTip(seg, ev.clientX, ev.clientY); });
+      seg.addEventListener("pointermove", function (ev) { showTip(seg, ev.clientX, ev.clientY); });
+      seg.addEventListener("pointerleave", hideTip);
+      seg.addEventListener("pointercancel", hideTip);
     });
+
+    // Рядок легенди — більша ціль для пальця, ніж смужка донату завтовшки 18px.
+    wrap.querySelectorAll(".legend-row").forEach(function (row) {
+      row.addEventListener("pointerdown", function (ev) {
+        var seg = segments.filter(function (item) { return item.dataset.cat === row.dataset.cat; })[0];
+        if (seg) showTip(seg, ev.clientX, ev.clientY);
+      });
+    });
+
+    // Слухач на самому wrap помирає разом із перемальовуванням, тож підписок
+    // не накопичується, на відміну від слухача на document.
+    wrap.addEventListener("pointerleave", hideTip);
   }
 
   function renderTrend() {
@@ -2216,6 +2238,18 @@
       settingsQueue = null;
       Promise.resolve(store.saveSettings(state.settings)).catch(function (e) { reportFailure("налаштування", e); });
     }, 120);
+  }
+
+  // Часовий пояс потрібен серверу: бот і Roo мають рахувати «сьогодні» за часом
+  // користувача, а не за часом хоста. Ключ невідомий нормалізатору налаштувань,
+  // тож він зберігається в extra_settings — так само, як onboardingDone.
+  // Пишемо один раз і лише коли пояс справді змінився.
+  function syncTimeZone() {
+    var zone = "";
+    try { zone = String(Intl.DateTimeFormat().resolvedOptions().timeZone || ""); } catch (e) { zone = ""; }
+    if (!zone || zone.length > 64) return;
+    if (settings().timezone === zone) return;
+    saveSettings({ timezone: zone });
   }
 
   function applySettingsToUi() {
@@ -3346,12 +3380,18 @@
 
   function runAiAsk(question) {
     var ctx = aiContext();
+    // Схема фільтра спільна з ботом і Roo (server/bot-ai.js:buildAskPrompt):
+    // раніше веб не розумів меж суми й пошуку за нотаткою, тож питання
+    // «ресторани більше 500 грн» тут не працювало.
     var prompt =
       "Користувач питає про свої фінанси. Поверни ТІЛЬКИ JSON-фільтр, не рахуй сам.\n" +
       "Сьогодні: " + ctx.today + ".\n" +
       "Статті витрат: " + ctx.expenseCategories.join(", ") + ".\n" +
       "Статті доходу: " + ctx.incomeCategories.join(", ") + ".\n" +
-      'Формат: {"categories":["..."],"type":"expense"|"income"|null,"from":"YYYY-MM-DD","to":"YYYY-MM-DD","title":"короткий підпис"}\n' +
+      'Формат: {"categories":["..."],"type":"expense"|"income"|null,"from":"YYYY-MM-DD","to":"YYYY-MM-DD",' +
+      '"minAmount":null,"maxAmount":null,"query":"","title":"короткий підпис"}\n' +
+      "minAmount і maxAmount — межі суми однієї операції, число або null.\n" +
+      "query — підрядок у нотатці, якщо названо конкретну покупку; інакше порожній рядок.\n" +
       "Порожній масив категорій означає всі. Якщо період не названо — останні 12 місяців.\n\n" +
       "Питання: " + question;
     aiCtl = new AbortController();
@@ -3367,7 +3407,16 @@
           return allowedExpenseCats.indexOf(c) >= 0 || INCOME_CATS.indexOf(c) >= 0;
         }) : [];
         var type = (f.type === "expense" || f.type === "income") ? f.type : null;
-        state.filter = { allMonths: true, cats: cats, type: type, from: from, to: to, text: "" };
+        var limit = function (value) {
+          if (value === null || value === undefined || value === "") return null;
+          var parsed = Number(value);
+          return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
+        };
+        var min = limit(f.minAmount);
+        var max = limit(f.maxAmount);
+        if (min != null && max != null && min > max) { var swap = min; min = max; max = swap; }
+        var query = String(f.query || "").trim().slice(0, 120);
+        state.filter = { allMonths: true, cats: cats, type: type, from: from, to: to, min: min, max: max, text: query };
         markFlip();
         renderLedger();
         // The number is computed here, from the page's own rows — the model
@@ -5094,6 +5143,7 @@
       bindStore();
       setTimeout(askDueSalaryPayments, 500);
       if (db) setTimeout(migrateLocalToDb, 900);
+      if (db) setTimeout(syncTimeZone, 1200);
     });
 
     Promise.resolve(useCap("downloads")).catch(function () { return null; }).then(function (d) {

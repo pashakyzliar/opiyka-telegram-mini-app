@@ -15,7 +15,9 @@ async function apiHarness() {
   const server = {
     state: { transactions: [], goals: [], settings: { budgets: { Хавка: 500 }, expenseCategories: [{ name: "Хавка", icon: "🍔" }] } },
     reads: 0,
-    beforeRead: null
+    beforeRead: null,
+    status: 200,
+    etag: '"v1"'
   };
   const window = { KOPIYKA_DEV_USER_ID: "test", location: { origin: "http://localhost", protocol: "http:" } };
   vm.runInNewContext(source, {
@@ -30,7 +32,11 @@ async function apiHarness() {
       server.reads++;
       const body = JSON.stringify(server.state);
       if (server.beforeRead) await server.beforeRead();
-      return { ok: true, text: async () => body };
+      const respHeaders = { get: (name) => (String(name).toLowerCase() === "etag" ? server.etag : null) };
+      if (server.status === 304) {
+        return { ok: false, status: 304, headers: respHeaders, text: async () => "" };
+      }
+      return { ok: true, status: 200, headers: respHeaders, text: async () => body };
     }
   });
   const db = await window.claude.use("db");
@@ -91,6 +97,30 @@ test("запис під час фонового запиту очікує сві
   await settle();
   assert.equal(received.length, 1);
   assert.equal(received[0].amount, 190);
+});
+
+test("304 від сервера зберігає кеш, підписки й таймер", async () => {
+  const h = await apiHarness();
+  let collections = 0;
+  let errors = 0;
+  h.db.collection("transactions").onSnapshot(() => collections++, () => errors++);
+  h.server.state.transactions.push({ id: "bot", amount: 190 });
+  await h.poll();
+  assert.equal(collections, 2);
+
+  // Далі сервер каже «нічого не змінилося». Раніше 304 виглядав би як
+  // помилка HTTP: підписки очистилися б, а опитування зупинилося.
+  h.server.status = 304;
+  for (let i = 0; i < 5; i++) await h.poll();
+  assert.equal(errors, 0);
+  assert.equal(collections, 2);
+  assert.equal(h.timers.size, 1);
+
+  // Після реального оновлення дані знову доходять.
+  h.server.status = 200;
+  h.server.state.transactions.push({ id: "bot2", amount: 20 });
+  await h.poll();
+  assert.equal(collections, 3);
 });
 
 test("відписка від усіх даних зупиняє фоновий таймер", async () => {
