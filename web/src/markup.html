@@ -82,8 +82,14 @@
       </span>
     </div>
     <div class="dashboard-actions">
-      <button class="head-btn" type="button" id="toggleAmounts" aria-pressed="false" aria-label="Приховати суми" title="Приховати суми">👁</button>
-      <button class="head-btn" type="button" id="toggleTheme" aria-pressed="false" aria-label="Синій інтерфейс" title="Синій інтерфейс">🌙</button>
+      <button class="head-btn" type="button" id="toggleAmounts" aria-pressed="false" aria-label="Приховати суми" title="Приховати суми" data-icon-state="off">
+        <svg class="ui-icon toggle-icon icon-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 12s3.2-5.2 9.2-5.2 9.2 5.2 9.2 5.2-3.2 5.2-9.2 5.2S2.8 12 2.8 12Z"/><circle cx="12" cy="12" r="2.6"/></svg>
+        <svg class="ui-icon toggle-icon icon-eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18"/><path d="M10.6 6.9A9.8 9.8 0 0 1 12 6.8c6 0 9.2 5.2 9.2 5.2a16 16 0 0 1-2.2 2.8M6.1 6.2A15.4 15.4 0 0 0 2.8 12s3.2 5.2 9.2 5.2a9.8 9.8 0 0 0 3-.5"/><path d="M9.8 9.8a3.1 3.1 0 0 0 4.4 4.4"/></svg>
+      </button>
+      <button class="head-btn" type="button" id="toggleTheme" aria-pressed="false" aria-label="Увімкнути темну тему" title="Увімкнути темну тему" data-icon-state="light">
+        <svg class="ui-icon toggle-icon icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.7 15.1A8.5 8.5 0 0 1 8.9 3.3 8.5 8.5 0 1 0 20.7 15.1Z"/></svg>
+        <svg class="ui-icon toggle-icon icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.8"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
       <button class="avatar-btn" type="button" id="cabinetOpen" aria-label="Кабінет">
         <span id="cabinetAvatarMini">К</span>
       </button>
@@ -129,7 +135,7 @@
         </div>
 
         <div class="cell cell-hero pocket pocket-soft" id="allowanceCard" data-help-key="allowance">
-          <span class="cell-label">На сьогодні залишок плану <span class="cell-sub2" id="allowanceBasis"></span></span>
+          <span class="cell-label">Сьогодні можна <span class="cell-sub2" id="allowanceBasis"></span></span>
           <span class="denomination money" id="allowanceValue">—</span>
           <div class="cell-meta">
             <span id="allowanceSpentToday"></span>
@@ -172,7 +178,9 @@
 
       <div class="overview-actions">
         <button class="btn-add" type="button" id="openAddRecord">+ Додати запис</button>
-        <button class="btn-icon-lg" type="button" id="openJournalQuick" aria-label="Журнал">🧾</button>
+        <button class="btn-icon-lg" type="button" id="openJournalQuick" aria-label="Відкрити журнал">
+          <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+        </button>
       </div>
       <div class="overview-links">
         <button class="linkish" type="button" data-goto="journal">Журнал</button>
@@ -485,13 +493,13 @@
 
 <nav class="viewtabs roo-dock" role="tablist" aria-label="Основна навігація">
   <button class="viewtab active" data-view="overview" role="tab" aria-controls="view-overview" aria-selected="true">
-    <span class="viewtab-ico" aria-hidden="true">📊</span><span>Огляд</span>
+    <span class="viewtab-ico" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 19V10M10 19V5M16 19v-7M22 19H2"/></svg></span><span>Огляд</span>
   </button>
   <button class="viewtab" data-view="pockets" role="tab" aria-controls="view-pockets" aria-selected="false">
-    <span class="viewtab-ico" aria-hidden="true">👛</span><span>Кишені</span>
+    <span class="viewtab-ico" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M3 7.5A3.5 3.5 0 0 1 6.5 4H19a2 2 0 0 1 2 2v12.5a1.5 1.5 0 0 1-1.5 1.5h-13A3.5 3.5 0 0 1 3 16.5v-9Z"/><path d="M3 8h15M16 12h5v4h-5a2 2 0 0 1 0-4Z"/></svg></span><span>Кишені</span>
   </button>
   <button class="viewtab" data-view="roo" role="tab" aria-controls="view-roo" aria-selected="false">
-    <span class="viewtab-ico" aria-hidden="true">🦘</span><span>Помічник Roo</span>
+    <span class="viewtab-ico" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24"><path d="M4 5.5h16v11H9l-5 4v-15Z"/><path d="m14.8 8 .5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5.5-1.3Z"/></svg></span><span>Помічник Roo</span>
   </button>
 </nav>
 

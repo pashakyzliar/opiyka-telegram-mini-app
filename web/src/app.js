@@ -4535,6 +4535,9 @@
       rememberViewScroll(state.view);
       state.view = view;
       syncDock();
+      if (window.KOPIYKA_SET_TELEGRAM_BACK_VISIBLE) {
+        window.KOPIYKA_SET_TELEGRAM_BACK_VISIBLE(state.view !== "overview");
+      }
       function swap() {
         VIEWS.forEach(function (v) {
           var el = document.getElementById("view-" + v);
@@ -4566,6 +4569,10 @@
       if (vt && vt.ready && vt.ready.catch) vt.ready.catch(function () {});
     }
     window.__walrooGoTo = goTo;
+    if (window.KOPIYKA_SET_TELEGRAM_BACK_VISIBLE) window.KOPIYKA_SET_TELEGRAM_BACK_VISIBLE(false);
+    window.addEventListener("kopiyka:telegram-back", function () {
+      if (state.view !== "overview") goTo("overview");
+    });
 
     document.querySelectorAll(".viewtab").forEach(function (tab) {
       tab.addEventListener("click", function () { goTo(tab.dataset.view); });
@@ -4696,8 +4703,8 @@
     var toggleAmounts = document.getElementById("toggleAmounts");
     function paintAmountsToggle(on) {
       if (!toggleAmounts) return;
-      // Стан читається і без кольору: сама піктограма інша.
-      toggleAmounts.textContent = on ? "🙈" : "👁";
+      // Стан читається і без кольору: SVG-піктограма змінюється на перекреслене око.
+      toggleAmounts.dataset.iconState = on ? "on" : "off";
       toggleAmounts.setAttribute("aria-pressed", on ? "true" : "false");
       toggleAmounts.setAttribute("aria-label", on ? "Показати суми" : "Приховати суми");
       toggleAmounts.title = on ? "Показати суми" : "Приховати суми";
@@ -4713,45 +4720,52 @@
       paintAmountsToggle(hidden);
     } catch (e) { paintAmountsToggle(false); }
 
-    // Синій інтерфейс — це другий набір значень тих самих токенів, а не
-    // окрема тема з власними правилами. Тому перемикається одним класом.
+    // Без локального вибору тема повторює Telegram. Натискання створює
+    // явний вибір для цього пристрою, але компоненти й далі живляться одним
+    // набором семантичних токенів.
     var toggleTheme = document.getElementById("toggleTheme");
-    function paintThemeToggle(on) {
+    function paintThemeToggle(dark) {
       if (!toggleTheme) return;
-      toggleTheme.textContent = on ? "☀️" : "🌙";
-      toggleTheme.setAttribute("aria-pressed", on ? "true" : "false");
-      toggleTheme.setAttribute("aria-label", on ? "Світлий інтерфейс" : "Синій інтерфейс");
-      toggleTheme.title = on ? "Світлий інтерфейс" : "Синій інтерфейс";
-      var surface = on ? "#071323" : "#F0EBFF";
+      toggleTheme.dataset.iconState = dark ? "dark" : "light";
+      toggleTheme.setAttribute("aria-pressed", dark ? "true" : "false");
+      toggleTheme.setAttribute("aria-label", dark ? "Увімкнути світлу тему" : "Увімкнути темну тему");
+      toggleTheme.title = dark ? "Увімкнути світлу тему" : "Увімкнути темну тему";
+      var surface = getComputedStyle(document.body).getPropertyValue("--app-bg").trim() || (dark ? "#08121F" : "#F4F1FF");
       var meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.setAttribute("content", surface);
-      // Колір полотна ставить адаптер Telegram — один раз, за темою месенджера,
-      // прямо в style елемента. Наш перемикач такий інлайн не перебивав, і в
-      // синьому режимі за краями застосунку лишалася світла смуга (а при
-      // відтягуванні екрана — ціле світле тло). Тож синхронізуємо явно.
-      document.body.style.backgroundColor = surface;
-      document.documentElement.style.setProperty("--telegram-bg", surface);
-      document.documentElement.style.colorScheme = on ? "dark" : "light";
-      var tg = window.Telegram && window.Telegram.WebApp;
-      if (tg) {
-        try {
-          if (tg.setHeaderColor) tg.setHeaderColor(surface);
-          if (tg.setBackgroundColor) tg.setBackgroundColor(surface);
-        } catch (e) {}
-      }
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
+      if (window.KOPIYKA_SYNC_TELEGRAM_CHROME) window.KOPIYKA_SYNC_TELEGRAM_CHROME(surface);
+    }
+    function setInterfaceTheme(dark, followsTelegram) {
+      document.body.classList.toggle("theme-blue", dark);
+      document.body.classList.toggle("theme-telegram", !!followsTelegram);
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+      paintThemeToggle(dark);
     }
     if (toggleTheme) toggleTheme.addEventListener("click", function () {
-      var on = document.body.classList.toggle("theme-blue");
-      paintThemeToggle(on);
+      var dark = !document.body.classList.contains("theme-blue");
+      setInterfaceTheme(dark, false);
       dropCssCache();
-      try { localStorage.setItem("walroo_theme_blue", on ? "1" : "0"); } catch (e) {}
+      try { localStorage.setItem("walroo_theme_blue", dark ? "1" : "0"); } catch (e) {}
       renderAll();
     });
     try {
-      var blue = localStorage.getItem("walroo_theme_blue") === "1";
-      document.body.classList.toggle("theme-blue", blue);
-      paintThemeToggle(blue);
-    } catch (e) { paintThemeToggle(false); }
+      var savedTheme = localStorage.getItem("walroo_theme_blue");
+      var followsTelegram = savedTheme === null;
+      var telegramDark = document.documentElement.getAttribute("data-telegram-theme") === "dark";
+      setInterfaceTheme(followsTelegram ? telegramDark : savedTheme === "1", followsTelegram);
+    } catch (e) { setInterfaceTheme(false, true); }
+    window.addEventListener("kopiyka:telegram-theme", function (event) {
+      var followsTelegram = false;
+      try { followsTelegram = localStorage.getItem("walroo_theme_blue") === null; } catch (e) { followsTelegram = true; }
+      if (!followsTelegram) {
+        paintThemeToggle(document.body.classList.contains("theme-blue"));
+        return;
+      }
+      setInterfaceTheme(!!(event.detail && event.detail.scheme === "dark"), true);
+      dropCssCache();
+      if (state.ready) renderAll();
+    });
 
     // Зручності зберігаємо локально, а не в акаунті: це властивість пристрою,
     // а не фінансових даних, і на планшеті людина може хотіти інакше.

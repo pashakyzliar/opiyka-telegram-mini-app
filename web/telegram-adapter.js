@@ -52,33 +52,90 @@
     return Promise.resolve();
   }
 
+  var THEME_PARAM_VARS = {
+    bg_color: "--tg-theme-bg-color",
+    text_color: "--tg-theme-text-color",
+    hint_color: "--tg-theme-hint-color",
+    link_color: "--tg-theme-link-color",
+    button_color: "--tg-theme-button-color",
+    button_text_color: "--tg-theme-button-text-color",
+    secondary_bg_color: "--tg-theme-secondary-bg-color",
+    header_bg_color: "--tg-theme-header-bg-color",
+    bottom_bar_bg_color: "--tg-theme-bottom-bar-bg-color",
+    accent_text_color: "--tg-theme-accent-text-color",
+    section_bg_color: "--tg-theme-section-bg-color",
+    section_header_text_color: "--tg-theme-section-header-text-color",
+    section_separator_color: "--tg-theme-section-separator-color",
+    subtitle_text_color: "--tg-theme-subtitle-text-color",
+    destructive_text_color: "--tg-theme-destructive-text-color"
+  };
+
+  function supports(version) {
+    try { return !tg || !tg.isVersionAtLeast || tg.isVersionAtLeast(version); }
+    catch (e) { return false; }
+  }
+
+  function syncTelegramChrome(surface) {
+    if (!tg) return;
+    var p = tg.themeParams || {};
+    var bg = surface || p.bg_color || (tg.colorScheme === "dark" ? "#08121F" : "#F4F1FF");
+    var header = surface || p.header_bg_color || bg;
+    var bottom = surface || p.bottom_bar_bg_color || p.secondary_bg_color || bg;
+    try {
+      if (supports("6.1") && tg.setHeaderColor) tg.setHeaderColor(header);
+      if (supports("6.1") && tg.setBackgroundColor) tg.setBackgroundColor(bg);
+      if (supports("7.10") && tg.setBottomBarColor) tg.setBottomBarColor(bottom);
+    } catch (e) {}
+  }
+  window.KOPIYKA_SYNC_TELEGRAM_CHROME = syncTelegramChrome;
+
+  function setTelegramBackVisible(visible) {
+    if (!tg || !supports("6.1") || !tg.BackButton) return;
+    try {
+      if (visible && tg.BackButton.show) tg.BackButton.show();
+      if (!visible && tg.BackButton.hide) tg.BackButton.hide();
+    } catch (e) {}
+  }
+  window.KOPIYKA_SET_TELEGRAM_BACK_VISIBLE = setTelegramBackVisible;
+
   function applyTelegramTheme() {
     if (!tg) return;
     var scheme = tg.colorScheme === "dark" ? "dark" : "light";
-    document.documentElement.setAttribute("data-theme", scheme);
-    document.documentElement.style.colorScheme = scheme;
+    var root = document.documentElement;
     var p = tg.themeParams || {};
-    var bg = p.bg_color || (scheme === "dark" ? "#0b1410" : "#efe9d9");
-    document.documentElement.style.setProperty("--telegram-bg", bg);
-    document.body.style.backgroundColor = bg;
-    try {
-      if (tg.setHeaderColor) tg.setHeaderColor(bg);
-      if (tg.setBackgroundColor) tg.setBackgroundColor(bg);
-    } catch (e) {}
+    root.setAttribute("data-telegram-theme", scheme);
+    Object.keys(THEME_PARAM_VARS).forEach(function (key) {
+      if (p[key]) root.style.setProperty(THEME_PARAM_VARS[key], p[key]);
+    });
+    syncTelegramChrome();
+    window.dispatchEvent(new CustomEvent("kopiyka:telegram-theme", { detail: { scheme: scheme } }));
   }
 
-  function applyViewportHeight(value) {
+  function setPixelVar(name, value) {
     value = Number(value || 0);
     if (!(value > 0)) return;
-    document.documentElement.style.setProperty("--tg-viewport-height", value + "px");
-    document.documentElement.style.setProperty("--tg-viewport-stable-height", value + "px");
+    document.documentElement.style.setProperty(name, value + "px");
   }
 
   function syncViewportHeight(forceLive) {
     if (!tg) return;
     var stable = Number(tg.viewportStableHeight || 0);
     var live = Number(tg.viewportHeight || 0);
-    applyViewportHeight(stable || (forceLive ? live : 0) || window.innerHeight);
+    setPixelVar("--app-viewport-height", live || stable || window.innerHeight);
+    setPixelVar("--app-viewport-stable-height", stable || (forceLive ? live : 0) || window.innerHeight);
+  }
+
+  function syncSafeAreas() {
+    if (!tg) return;
+    var root = document.documentElement;
+    var safe = tg.safeAreaInset || {};
+    var content = tg.contentSafeAreaInset || {};
+    ["top", "right", "bottom", "left"].forEach(function (side) {
+      var outer = Math.max(0, Number(safe[side] || 0));
+      var inner = Math.max(0, Number(content[side] || 0));
+      root.style.setProperty("--app-tg-safe-" + side, outer + "px");
+      root.style.setProperty("--app-tg-content-safe-" + side, inner + "px");
+    });
   }
 
   function bootTelegram() {
@@ -88,11 +145,18 @@
       tg.expand();
       applyTelegramTheme();
       syncViewportHeight(true);
+      syncSafeAreas();
       if (tg.onEvent) tg.onEvent("themeChanged", applyTelegramTheme);
       if (tg.onEvent) tg.onEvent("viewportChanged", function (event) {
-        if (event && event.isStateStable === false) return;
-        syncViewportHeight(false);
+        syncViewportHeight(!(event && event.isStateStable === false));
       });
+      if (tg.onEvent) tg.onEvent("safeAreaChanged", syncSafeAreas);
+      if (tg.onEvent) tg.onEvent("contentSafeAreaChanged", syncSafeAreas);
+      if (supports("6.1") && tg.BackButton && tg.BackButton.onClick) {
+        tg.BackButton.onClick(function () {
+          window.dispatchEvent(new CustomEvent("kopiyka:telegram-back"));
+        });
+      }
     } catch (e) { console.warn("Telegram WebApp init failed", e); }
     window.KOPIYKA_TELEGRAM = { webApp: tg, user: tg.initDataUnsafe && tg.initDataUnsafe.user };
   }
