@@ -1,0 +1,74 @@
+# 15. TOP 50 GitHub Repositories
+
+Дата метрик: **11.09.2026** (GitHub GraphQL API). **Activity** = дата останнього коміту в default branch. **OPIYKA VALUE SCORE** (0–100) рахується для **нашого** стеку: vanilla JS, Node `http`, PostgreSQL, Telegram. Тому React-бібліотеки з великою кількістю stars тут низько.
+
+Правило ponytail для кожного кандидата: спершу розглянуто простішу альтернативу (вже наявне в проєкті, stdlib, нативна платформа). Вона вказана в колонці «What exactly we can use».
+
+| Rank | Repository | URL | Category | Stars | Activity | License | What it does | Why relevant | What exactly we can use | Type | OPIYKA | Effort | Impact |
+|---:|---|---|---|---:|---|---|---|---|---|---|---:|---|---|
+| 1 | actualbudget/actual | https://github.com/actualbudget/actual | Finance OSS | 28,691 | 2026-09-11 | MIT | Local-first бюджетування | Найзріліший MIT-код: регулярні платежі, правила, бюджети | `packages/loot-core/src/server/schedules/find-schedules.ts` (алгоритм регулярних), `rules/{condition,action}.ts` (модель правил), `budget/goal-template.ts` | ADAPT | 92 | Medium | High |
+| 2 | we-promise/sure | https://github.com/we-promise/sure | Finance OSS + AI | 9,835 | 2026-09-11 | AGPL-3.0 | Форк Maybe з AI-помічником | Найкращий «дизайн-документ» для Roo та інсайтів | Ідеї (не код): `app/models/assistant/function/*.rb`, `recurring_transaction/identifier.rb` (±7.5%, 2/3 входження), `insight/generators/*.rb` | INSPIRE | 91 | Medium | High |
+| 3 | promptfoo/promptfoo | https://github.com/promptfoo/promptfoo | LLM evals | 25,021 | 2026-09-11 | MIT | Тестування промптів і моделей | Регресії парсера й Roo зараз не ловляться | 50–100 українських фраз → очікуваний JSON; tool-call тести; порівняння gpt-oss-120b і 20b. Альтернатива `node:test` з фікстурами — годиться для старту, але без порівняння моделей | USE | 88 | Low | High |
+| 4 | sakowicz/actual-ai | https://github.com/sakowicz/actual-ai | AI categorization | 519 | 2026-09-07 | MIT | LLM-категоризація для Actual | Той самий пайплайн, що в нас, але з проміжним кроком | `src/transaction/processing-strategy/*` (rule → existing → new), `src/similarity-calculator.ts` (дедуп категорій) | ADAPT | 86 | Low | High |
+| 5 | GiGurra/subscription-detector | https://github.com/GiGurra/subscription-detector | Recurring detection | 1 | 2026-07-01 | MIT | Детектор підписок з виписок | ~150 рядків, найпростіший робочий алгоритм | `internal/detector.go`: група за payee, 1 оплата на місяць, допуск 35%, статус active/stopped | ADAPT | 84 | Low | High |
+| 6 | mayswind/ezbookkeeping | https://github.com/mayswind/ezbookkeeping | Finance OSS + AI | 5,559 | 2026-09-10 | MIT | Легкий облік з AI | Текст → транзакція, курси НБУ | `pkg/api/large_language_models.go` (TZ клієнта!), `pkg/exchangerates/national_bank_of_ukraine_datasource.go` | ADAPT | 83 | Low | Medium |
+| 7 | timgit/pg-boss | https://github.com/timgit/pg-boss | Jobs | 3,944 | 2026-09-10 | MIT | Черга й cron на PostgreSQL | Брифи й звіти без Redis, без дублікатів при деплої | cron для брифів, singleton-задачі. Альтернатива `setInterval` не переживає рестарт | USE | 82 | Low | High |
+| 8 | greensock/GSAP | https://github.com/greensock/GSAP | Animation | 28,353 | 2026-04-13 | власна (—) | Анімації | **Вже вендорено** | tween чисел балансу, Flip для списків. Замінює Motion, AutoAnimate, number-flow | USE (є) | 80 | Low | Medium |
+| 9 | Oleksios/Merchant-Category-Codes | https://github.com/Oleksios/Merchant-Category-Codes | Data (MCC UA) | 70 | 2023-08-21 | MIT | MCC з українськими описами | Категоризація банківських операцій без LLM | Довідник для мапи MCC → канонічна категорія | USE | 80 | Low | High* |
+| 10 | Telegram-Mini-Apps/tma.js | https://github.com/Telegram-Mini-Apps/tma.js | Telegram SDK | 1,200 | 2026-07-14 | MIT | SDK Mini Apps | `init-data-node` уже в нас | лишити `@tma.js/init-data-node`; `@tma.js/sdk` не потрібен (адаптер покриває) | USE (є) | 78 | Low | Medium |
+| 11 | midday-ai/midday | https://github.com/midday-ai/midday | Finance + AI agent | 14,979 | 2026-06-13 | AGPL-3.0 | Бізнес-фінанси з AI | Архітектура агента в проді | Ідеї: `apps/api/src/chat/assistant-runtime.ts` (`stepCountIs(10)`, `maxTools: 12`, `smoothStream`), runway-графіки | INSPIRE | 78 | — | Medium |
+| 12 | vas3k/TaxHacker | https://github.com/vas3k/TaxHacker | AI receipt parsing | 6,693 | 2026-08-11 | MIT | LLM-розбір чеків | Фото чека → записи | `ai/schema.ts`: JSON Schema з категорій користувача + `items[]` | ADAPT | 75 | Medium | Medium |
+| 13 | leeoniya/uPlot | https://github.com/leeoniya/uPlot | Charts | 10,485 | 2026-09-09 | MIT | Швидкі часові графіки (canvas) | 21.3 KB gzip, vanilla | Лише якщо знадобляться ряди 12+ місяців із зумом. Спершу власний SVG (0 KB) | USE (умовно) | 74 | Low | Medium |
+| 14 | greggles/mcc-codes | https://github.com/greggles/mcc-codes | Data (MCC) | 536 | 2024-08-16 | Unlicense | Загальний MCC-довідник | Перехресна перевірка MCC | CSV/JSON кодів | USE | 72 | Low | Medium* |
+| 15 | vercel/ai | https://github.com/vercel/ai | AI SDK | 26,689 | 2026-09-11 | NOASSERTION | Tool loop, стрімінг, провайдери | Коли потрібні стрімінг і кілька провайдерів | `ToolLoopAgent`, `streamText`. Зараз власний цикл `roo.js` + `stream: true` простіший | ADAPT (пізніше) | 72 | Medium | Medium |
+| 16 | getsentry/sentry-javascript | https://github.com/getsentry/sentry-javascript | Errors | 8,745 | 2026-09-11 | MIT | SDK помилок | Помилки клієнтів у Telegram WebView невидимі | `@sentry/browser` + `@sentry/node` → Sentry cloud або Bugsink. Спершу `window.onerror` → PG | USE (Phase 2) | 72 | Low | Medium |
+| 17 | cure53/DOMPurify | https://github.com/cure53/DOMPurify | Security | 17,378 | 2026-09-09 | Apache-2.0 | Санітизація HTML | Якщо Roo відповідатиме markdown | 10.5 KB gzip. Зараз `esc()` достатньо | USE (умовно) | 70 | Low | Medium |
+| 18 | animir/node-rate-limiter-flexible | https://github.com/animir/node-rate-limiter-flexible | Rate limiting | 3,585 | 2026-06-08 | ISC | Ліміти з PG-сховищем | Ліміти AI переживуть рестарт | `RateLimiterPostgres`. Простіше — власна таблиця `ai_usage` з upsert (10 рядків) | ADAPT | 70 | Low | Medium |
+| 19 | ellite/Wallos | https://github.com/ellite/Wallos | Subscriptions | 8,484 | 2026-09-10 | GPL-3.0 | Трекер підписок | UX підписок і нагадувань | Ідеї екрана «Підписки» | INSPIRE | 68 | — | Medium |
+| 20 | simple-statistics/simple-statistics | https://github.com/simple-statistics/simple-statistics | Stats | 3,520 | 2026-09-08 | ISC | Статистика на JS | Аномалії, тренди без LLM | `median`, `medianAbsoluteDeviation`, `quantile`, `linearRegression` на сервері | USE | 68 | Low | Medium |
+| 21 | grammyjs/grammY | https://github.com/grammyjs/grammY | Bot framework | 3,740 | 2026-08-26 | MIT | Фреймворк ботів | Коли додадуться платежі й діалоги | Поки прямий `fetch` у `server/app.js` працює, лишити його | ADAPT (пізніше) | 66 | Medium | Medium |
+| 22 | evanw/esbuild | https://github.com/evanw/esbuild | Build | 40,050 | 2026-08-09 | MIT | Мінімальний збирач | Мінімізація `app.js` (274 KB) | одна команда. Спершу нативні ES-модулі + gzip | ADAPT (умовно) | 66 | Low | Medium |
+| 23 | firefly-iii/firefly-iii | https://github.com/firefly-iii/firefly-iii | Finance OSS | 24,579 | 2026-09-08 | AGPL-3.0 | Облік фінансів | UX правил «якщо → то» | Ідеї: застосування правила до історії з попереднім переглядом | INSPIRE | 65 | — | Medium |
+| 24 | PostHog/posthog | https://github.com/PostHog/posthog | Product analytics | 39,743 | 2026-09-11 | NOASSERTION | Продуктова аналітика | Когорти, воронки | Пізніше server-side. Зараз `product_events` у PG | INSPIRE / USE (пізніше) | 65 | Medium | Medium |
+| 25 | iSoron/uhabits | https://github.com/iSoron/uhabits | Habits | 10,236 | 2026-07-21 | GPL-3.0 | Loop Habit Tracker | «Сила звички» замість крихкого streak | Ідея формули для `calmMode` | INSPIRE | 64 | — | Low |
+| 26 | colinhacks/zod | https://github.com/colinhacks/zod | Validation | 43,927 | 2026-09-10 | MIT | Схеми й валідація | Одна схема → JSON Schema для моделі + перевірка | Для write-інструментів Roo. Для read вистачає ручної валідації | ADAPT | 64 | Low | Medium |
+| 27 | chartjs/Chart.js | https://github.com/chartjs/Chart.js | Charts | 67,689 | 2026-09-11 | MIT | Графіки | Альтернатива uPlot | 66.8 KB gzip. Лише якщо потрібно багато типів графіків швидко | USE (альт.) | 62 | Low | Medium |
+| 28 | Tanq16/ExpenseOwl | https://github.com/Tanq16/ExpenseOwl | Finance OSS (vanilla) | 1,506 | 2025-10-02 | MIT | Простий трекер | Той самий vanilla-стек | `internal/web/templates/{functions.js,sw.js}` як референс | INSPIRE | 62 | — | Low |
+| 29 | langfuse/langfuse | https://github.com/langfuse/langfuse | LLM observability | 34,475 | 2026-09-11 | NOASSERTION | Трасування LLM | Коли AI-запитів стане тисячі на день | Спершу `ai_usage` у PG | INSPIRE / USE (пізніше) | 62 | Medium | Low |
+| 30 | bugsink/bugsink | https://github.com/bugsink/bugsink | Errors (self-host) | 2,064 | 2026-09-11 | NOASSERTION | Sentry-сумісний self-host | Дані помилок у нашій інфраструктурі | Приймач Sentry SDK | USE (альт.) | 62 | Low | Medium |
+| 31 | barvian/number-flow | https://github.com/barvian/number-flow | Microinteraction | 7,690 | 2026-07-18 | MIT | Анімація цифр | Ефект «прокручування цифр» | Референс ефекту; реалізувати на GSAP (вже є) | INSPIRE | 60 | — | Low |
+| 32 | DennisBauer/RecurringExpenseTracker | https://github.com/DennisBauer/RecurringExpenseTracker | Recurring UX | 398 | 2026-09-10 | GPL-3.0 | Регулярні витрати + нагадування | «Найближчі платежі» | Ідеї: `UpcomingPaymentsExpander.kt`, `ExpenseNotificationManager.kt` | INSPIRE | 60 | — | Medium |
+| 33 | lucide-icons/lucide | https://github.com/lucide-icons/lucide | Icons | 24,462 | 2026-09-11 | NOASSERTION | Line-іконки | Єдиний стиль SVG-іконок (UI-аудит) | Скопіювати 20–30 статичних SVG. Не npm-пакет на 99 KB | USE (статично) | 60 | Low | Low |
+| 34 | markedjs/marked | https://github.com/markedjs/marked | Markdown | 37,135 | 2026-09-10 | NOASSERTION | Markdown → HTML | Лише якщо Roo писатиме списки й таблиці | 12.7 KB gzip + DOMPurify | USE (умовно) | 60 | Low | Low |
+| 35 | spliit-app/spliit | https://github.com/spliit-app/spliit | Shared expenses | 2,928 | 2026-09-07 | MIT | Спільні витрати | Майбутні бюджети для пар і сімей | Модель «групи й борги» | INSPIRE | 58 | — | Medium |
+| 36 | openai/openai-agents-js | https://github.com/openai/openai-agents-js | Agents | 3,790 | 2026-09-10 | MIT | Агентний SDK | Guardrails, handoffs | Ідеї guardrails. Не залежність | INSPIRE | 58 | — | Low |
+| 37 | nanostores/nanostores | https://github.com/nanostores/nanostores | State | 7,600 | 2026-09-08 | MIT | Tiny store | При модуляризації `app.js` | Альтернатива власному `store.js` на 40 рядків | ADAPT (умовно) | 58 | Low | Low |
+| 38 | viliket/pure-web-bottom-sheet | https://github.com/viliket/pure-web-bottom-sheet | Bottom sheet | 64 | 2026-08-12 | MIT | Web Component bottom sheet на CSS scroll-snap | Нативний підхід без JS-фізики | Референс техніки для `<dialog>` + scroll-snap | INSPIRE | 58 | — | Low |
+| 39 | OvidijusParsiunas/deep-chat | https://github.com/OvidijusParsiunas/deep-chat | Chat UI | 3,713 | 2026-09-10 | MIT | Чат-віджет (Web Component) | Єдиний vanilla-сумісний чат | Fallback, якщо власний тред Roo стане дорогим | INSPIRE | 55 | — | Low |
+| 40 | mastra-ai/mastra | https://github.com/mastra-ai/mastra | Agents | 27,935 | 2026-09-11 | NOASSERTION | TS агентний фреймворк | Пам'ять і workflows | Ідеї; зараз надлишково | INSPIRE | 55 | — | Low |
+| 41 | assistant-ui/assistant-ui | https://github.com/assistant-ui/assistant-ui | Chat UI | 12,109 | 2026-09-11 | MIT | React-чат | UI tool-calls і підтверджень | Візуальні патерни карток дій | INSPIRE | 55 | — | Low |
+| 42 | Openpanel-dev/openpanel | https://github.com/Openpanel-dev/openpanel | Product analytics | 6,918 | 2026-09-04 | AGPL-3.0 | Mixpanel-альтернатива | Self-host аналітика | Альтернатива PostHog | INSPIRE | 55 | — | Low |
+| 43 | nikandr-surkov/telegram-mini-app-stars-payments | https://github.com/nikandr-surkov/telegram-mini-app-stars-payments | Stars payments | 24 | 2025-08-16 | — | Приклад Stars-платежів | Швидкий старт інтеграції | Референс потоку інвойсу (без ліцензії, лише читати) | INSPIRE | 55 | — | Medium |
+| 44 | jakearchibald/idb-keyval | https://github.com/jakearchibald/idb-keyval | Storage | 3,239 | 2026-07-08 | NOASSERTION | IndexedDB key-value | Офлайн-черга | 0.8 KB. Спершу Telegram `DeviceStorage` (нативно) | INSPIRE | 55 | — | Low |
+| 45 | helmetjs/helmet | https://github.com/helmetjs/helmet | Security headers | 10,734 | 2026-07-28 | MIT | Security-заголовки | У нас немає CSP й інших | Перелік заголовків і типових значень. Для `node:http` поставити вручну | INSPIRE | 55 | — | Medium |
+| 46 | telegram-mini-apps-dev/analytics | https://github.com/telegram-mini-apps-dev/analytics | Telegram analytics | 102 | 2026-01-22 | — | SDK аналітики Telegram Apps | Рейтинг у каталозі | Лише якщо йдете в каталог | USE (опц.) | 50 | Low | Low |
+| 47 | econumo/econumo | https://github.com/econumo/econumo | Finance OSS | 102 | 2026-09-11 | MIT | Сімейний бюджет, мультивалюта | Мультивалюта | Модель валют і спільних рахунків | INSPIRE | 50 | — | Low |
+| 48 | EnhancedJax/Bagels | https://github.com/EnhancedJax/Bagels | Finance OSS | 2,903 | 2025-07-06 | GPL-3.0 | TUI-трекер | Таксономія must / need / want | Ідея позначки «потреба / бажання» | INSPIRE | 50 | — | Low |
+| 49 | BoundaryML/baml | https://github.com/BoundaryML/baml | Structured output | 9,167 | 2026-09-11 | Apache-2.0 | DSL для structured output | Надійний JSON від LLM | Ідеї. Нам вистачає `json_schema` + нормалізаторів | INSPIRE | 50 | — | Low |
+| 50 | langchain-ai/langgraphjs | https://github.com/langchain-ai/langgraphjs | Agents | 3,273 | 2026-09-10 | MIT | Графові агенти | Довгі workflows з чекпоінтами | Не зараз; сценарії Roo не графові | INSPIRE | 50 | — | Low |
+
+\* Impact «High» лише разом з банківським імпортом (monobank). Без нього — Low.
+
+## Свідомо НЕ в TOP 50 (IGNORE) і чому
+
+| Репозиторій | Причина |
+|---|---|
+| shadcn/ui, Radix, Base UI, React Aria, Mantine, Chakra, MUI, TelegramUI, Konsta | потребують React (міграцію фронтенду) |
+| Recharts, Nivo, Visx, Tremor, assistant-ui (як залежність), vaul, sonner, CopilotKit | React |
+| ECharts (359 KB gzip), ApexCharts (254 KB) | вага для Telegram WebView |
+| Motion, AutoAnimate, anime.js | дублюють GSAP, який уже є |
+| Supabase, Neon, Firebase, Turso | міграція БД без вигоди |
+| BullMQ | потребує Redis |
+| pgvector, векторні пошуки | overkill для даних одного користувача |
+| CrewAI, AutoGen, Agno, smolagents, Pydantic AI, Google ADK | Python і multi-agent — не наш стек і не наша задача |
+| vanna-ai/vanna (архів), maybe-finance/maybe (архів), react-telegram-web-app (архів), rebuff (архів), telegraf (стагнація), frappe/charts (реліз 2022) | не підтримуються |
