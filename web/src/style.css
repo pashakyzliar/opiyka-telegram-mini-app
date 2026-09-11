@@ -1133,7 +1133,7 @@ body { font-family: var(--font-text); font-size: var(--text-body); }
 .wallet-mini-mark { width: 28px; height: 28px; font-size: 13px; }
 .dashboard-date { min-width: 0; padding-left: 16px; display: flex; flex-direction: column; }
 .dashboard-weekday { color: var(--ink-muted); font-size: 11px; line-height: 1.2; }
-.dashboard-date strong { margin: 2px 0; color: var(--ink); font: 800 clamp(24px, 7vw, 38px)/1 "Oswald", sans-serif; letter-spacing: -.035em; text-transform: capitalize; }
+.dashboard-date strong { margin: 2px 0; color: var(--ink); font: 800 clamp(24px, 7vw, 38px)/1 "Oswald", sans-serif; letter-spacing: -.035em; text-transform: none; }
 .dashboard-greeting { color: var(--ink-soft); font-size: 12px; }
 .sync-pill { align-self: start; border: 0; padding: 4px 0; color: var(--ink-muted); font-size: 0; }
 .sync-dot { width: 8px; height: 8px; box-shadow: 0 0 0 4px rgba(93,214,162,.1); }
@@ -1213,7 +1213,10 @@ body { font-family: var(--font-text); font-size: var(--text-body); }
 @media (max-width: 720px) {
   .app { padding: 8px 10px calc(152px + env(safe-area-inset-bottom)); }
   .dashboard-header { min-height: 104px; padding: 15px; border-radius: 19px; }
-  .dashboard-brand > span:last-child { display: none; }
+  /* Правило дісталося від старої шапки, де останнім span був підзаголовок.
+     У новій шапці останній span — це .brand-text зі словесним знаком, і на
+     телефоні воно ховало назву застосунку цілком. Ховаємо лише підпис. */
+  .dashboard-brand > span:last-child:not(.brand-text) { display: none; }
   .dashboard-date { padding-left: 10px; }
   .dashboard-date strong { font-size: 29px; }
   .dashboard-greeting { font-size: 11px; }
@@ -1255,6 +1258,12 @@ body { font-family: var(--font-text); font-size: var(--text-body); }
 .block-help-button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .block-help-button[aria-expanded="true"] { border-color: var(--gold); color: var(--gold-hi); background: rgba(58, 111, 202, .32); }
 .cell.has-block-help { padding-right: 46px; }
+/* Відступ праворуч звільняє місце під кнопку «?», але вона висить угорі, а
+   сума стоїть нижче — і у вузькій колонці ці 31 px з'їдали третину рядка,
+   через що «2 415,00 ₴» обрізалось. Числу віддаємо зону назад: воно все
+   одно проходить під кнопкою. */
+.cell.has-block-help > .cell-value,
+.cell.has-block-help > .denomination { margin-right: -31px; }
 .panel.has-block-help > .panel-head,
 .panel.has-block-help > .ledger-head { padding-right: 34px; }
 .cabinet-panel.has-block-help > .cabinet-profile { padding-right: 34px; }
@@ -1988,7 +1997,40 @@ body.theme-blue {
   --hair: rgba(174, 207, 255, .14);
   --shadow: 0 14px 34px rgba(0, 5, 18, .5);
   --shadow-soft: 0 6px 18px rgba(0, 5, 18, .38);
+
+  /* Без цього блоку темна тема лишалася наполовину світлою.
+     Аліаси (--ink, --panel, --paper…) оголошені на :root і там же
+     обчислюються — від СВІТЛОЇ палітри. Коли body перевизначає
+     --roo-*, аліаси не переобчислюються: body успадковує вже готове
+     значення з html. Через це панелі й шапка лишалися бежевими, а
+     номери днів у календарі малювалися сливовим по темно-синьому —
+     контраст 1.05:1, тобто текст зникав. Тому всі аліаси повторено
+     тут: на body вони беруть уже синю палітру. */
+  --paper:        var(--roo-lavender);
+  --paper-2:      var(--roo-lavender-2);
+  --panel:        var(--roo-surface);
+  --panel-2:      var(--roo-surface-2);
+  --ink:          var(--roo-plum);
+  --ink-soft:     var(--roo-plum-soft);
+  --hair-strong:  var(--roo-divider);
+  --gold:         var(--roo-purple);
+  --gold-hi:      var(--roo-purple-hi);
+  --gold-lo:      var(--roo-purple-lo);
+  --foil:         linear-gradient(110deg, var(--roo-purple) 0%, var(--roo-purple-hi) 52%, var(--roo-purple) 100%);
+  --positive:     var(--roo-positive);
+  --negative:     var(--roo-negative);
 }
+
+/* Синя кишеня балансу — середньої світлості, на ній 4.5:1 дає лише
+   чистий білий, тож підписи там білі, а не приглушені. */
+body.theme-blue .pocket-primary .cell-label,
+body.theme-blue .pocket-primary .cell-sub,
+body.theme-blue .pocket-primary .cell-meta,
+body.theme-blue .pocket-primary .cell-sub2 { color: #fff; opacity: 1; }
+/* Мінус на цій же кишені: #FF8E86 давало 2.05:1. Світліший відтінок
+   лишається «червоним» і проходить 3:1 для великого тексту. */
+body.theme-blue .pocket-primary .cell-value.negative,
+body.theme-blue .pocket-primary .denomination.negative { color: #FFD9D4; }
 body.theme-blue .bg-vignette {
   background:
     radial-gradient(110% 60% at 50% -8%, rgba(55, 112, 214, .28), transparent 62%),
@@ -2046,7 +2088,10 @@ body.theme-blue .roo-bot { background: var(--roo-surface-2); }
 body.theme-blue .roo-chip { background: var(--roo-surface-2); }
 body.theme-blue .cal-cell[aria-current="date"] { background: var(--roo-purple); color: #fff; }
 body.theme-blue .type-toggle button { color: var(--roo-plum-soft); }
-body.theme-blue .type-toggle button.active { color: #fff; }
+/* У синій темі --negative і --positive стають світлими пастельними —
+   білий напис на них дає 2.2:1. Тут заливка світла, тож текст темний. */
+body.theme-blue .type-toggle button.active { color: var(--roo-lavender); }
+body.theme-blue .type-toggle button.active[data-type="transfer"] { color: var(--roo-lavender); }
 
 /* ===================================================================
    Огляд за макетом Roo Pop: шапка з плиткою бренду, слоган, асиметрична
@@ -2381,3 +2426,28 @@ body.text-large .roo-dock .viewtab { font-size: 14px; }
 body.simple-overview #overview-month .cell-in,
 body.simple-overview #overview-month .cell-out,
 body.simple-overview .overview-links { display: none; }
+
+/* ===================================================================
+   Приховування сум — останнім блоком і свідомо
+   ===================================================================
+   Правило вище (рядок ~1721) перебивалося пізнішими `filter: none`
+   з блоку, що знімав стару «фольгу» з чисел: у них однакова вага, і
+   вигравало те, що нижче. Через це баланс — найчутливіше число на
+   екрані — лишався різким, хоча кнопка «Приховати суми» вже
+   показувала стан «приховано». Тож блок стоїть у самому кінці файлу,
+   має вищу вагу і перелічує всі поверхні, де взагалі видно гроші. */
+body.amounts-hidden .money,
+body.amounts-hidden .num,
+body.amounts-hidden .cell-value,
+body.amounts-hidden .cell-value.money,
+body.amounts-hidden .cell-value.money.negative,
+body.amounts-hidden .denomination,
+body.amounts-hidden .week-split-sum,
+body.amounts-hidden .cal-day-sum,
+body.amounts-hidden .pocket-value,
+body.amounts-hidden .stat-line strong,
+body.amounts-hidden .row-sum,
+body.amounts-hidden table td.num {
+  filter: blur(8px);
+  user-select: none;
+}

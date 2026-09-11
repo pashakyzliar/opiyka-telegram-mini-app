@@ -1675,6 +1675,19 @@
 
   /* ============================ календар ============================ */
 
+  // Найраніша дата, за яку взагалі є запис. До неї вироки не малюємо:
+  // порожній день до початку обліку — це не «вклався в план», а просто
+  // відсутність даних. Якщо записів ще немає — відліком стає сьогодні.
+  function trackingStartISO() {
+    var list = state.transactions || [];
+    var min = "";
+    for (var i = 0; i < list.length; i++) {
+      var d = String(list[i].date || "");
+      if (d && (!min || d < min)) min = d;
+    }
+    return min || todayISO();
+  }
+
   var WEEKDAY_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
 
   function fmtDate(iso) {
@@ -1755,9 +1768,11 @@
       var marks = "";
       var verdict = "";
       // Галочка чи хрестик мають сенс лише там, де є з чим порівнювати:
-      // день у минулому або сьогодні, і на нього заданий денний план.
-      // Майбутні дні та дні без плану лишаються без вироку.
-      if (plan > 0 && iso <= today) {
+      // день у минулому або сьогодні, на нього заданий денний план, і
+      // облік у цей день уже вівся. Без останньої умови новачок на старті
+      // бачив суцільні галочки за початок місяця — застосунок хвалив його
+      // за дні, коли він ще навіть не встановив застосунок.
+      if (plan > 0 && iso <= today && iso >= trackingStartISO()) {
         var ok = spent <= plan;
         verdict = ok ? "ok" : "over";
         marks += '<i class="cal-verdict cal-' + verdict + '" aria-hidden="true">' + (ok ? "✓" : "✕") + '</i>';
@@ -2166,17 +2181,6 @@
     });
     var line = parts.join("   ·   ") + "   ·   ";
     track.textContent = line + line;
-  }
-
-  function renderAll() {
-    dropMonthCache();
-    var steps = [renderStats, renderAllowance, renderWeekForecast, renderBudgets, renderDonut,
-      renderTrend, renderLedger, renderRecurring, renderAmortize,
-      renderDebts, renderRecords, renderTicker, renderYear, renderPresets, renderSettings, syncSearchCats];
-    steps.forEach(function (fn) {
-      try { fn(); } catch (err) { console.error("[Копійка] помилка рендеру в " + fn.name + ":", err); }
-    });
-    if (window.__guilloche) { try { window.__guilloche.update(guillocheParams()); } catch (e) {} }
   }
 
   /* ============================ guilloche parameters ============================ */
@@ -4022,7 +4026,11 @@
     } else {
       steps = [];
     }
-    steps.forEach(function (fn) { fn(); });
+    // Кроки ізольовані: якщо один блок упаде на кривих даних, решта екрана
+    // все одно намалюється, а не лишиться порожньою розміткою.
+    steps.forEach(function (fn) {
+      try { fn(); } catch (err) { console.error("[Walroo] помилка рендеру в " + fn.name + ":", err); }
+    });
     if (state.view === "overview" || state.view === "journal") refreshExpenseLabels();
     ensureBlockHelpButtons(document);
     fitAmounts();
@@ -4058,13 +4066,23 @@
   }
 
   var renderQueued = false;
+  var renderFallbackTimer = null;
   function renderAll() {
     if (renderQueued) return;
     renderQueued = true;
-    requestAnimationFrame(function () {
+    var run = function () {
+      if (!renderQueued) return;
       renderQueued = false;
+      clearTimeout(renderFallbackTimer);
+      renderFallbackTimer = null;
       renderAllNow();
-    });
+    };
+    // Прихована вкладка не малює кадрів, і requestAnimationFrame у ній може
+    // не спрацювати взагалі — тоді екран мовчки лишився б із порожньою
+    // розміткою. Тож тримаємо таймер-страхувальник: хто прийде першим, той
+    // і малює, другий вихід нічого не робить.
+    renderFallbackTimer = setTimeout(run, 120);
+    requestAnimationFrame(run);
   }
 
   function showCabinetProfile() {
@@ -4704,8 +4722,23 @@
       toggleTheme.setAttribute("aria-pressed", on ? "true" : "false");
       toggleTheme.setAttribute("aria-label", on ? "Світлий інтерфейс" : "Синій інтерфейс");
       toggleTheme.title = on ? "Світлий інтерфейс" : "Синій інтерфейс";
+      var surface = on ? "#071323" : "#F0EBFF";
       var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute("content", on ? "#071323" : "#F0EBFF");
+      if (meta) meta.setAttribute("content", surface);
+      // Колір полотна ставить адаптер Telegram — один раз, за темою месенджера,
+      // прямо в style елемента. Наш перемикач такий інлайн не перебивав, і в
+      // синьому режимі за краями застосунку лишалася світла смуга (а при
+      // відтягуванні екрана — ціле світле тло). Тож синхронізуємо явно.
+      document.body.style.backgroundColor = surface;
+      document.documentElement.style.setProperty("--telegram-bg", surface);
+      document.documentElement.style.colorScheme = on ? "dark" : "light";
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        try {
+          if (tg.setHeaderColor) tg.setHeaderColor(surface);
+          if (tg.setBackgroundColor) tg.setBackgroundColor(surface);
+        } catch (e) {}
+      }
     }
     if (toggleTheme) toggleTheme.addEventListener("click", function () {
       var on = document.body.classList.toggle("theme-blue");
